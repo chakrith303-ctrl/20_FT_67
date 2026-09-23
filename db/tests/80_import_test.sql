@@ -15,7 +15,7 @@ set local role app_user;
 
 -- ตรวจสอบ (dry run): ฝ่ายใหม่ยังไม่มี → error, ไม่บันทึก
 insert into res values ('dry_no_dept', public.admin_import_members($$[
-  {"id":"M100","student_id":"079","full_name":"นางสาวทดสอบ หนึ่ง","nickname":"หนึ่ง","department":"ฝ่ายอำนวยการ/ประธานโครงการ","position":"ประธานโครงการ","work_status":"ปฏิบัติหน้าที่"},
+  {"id":"M100","student_id":"079","full_name":"นางสาวทดสอบ หนึ่ง","nickname":"หนึ่ง","department":"ฝ่ายที่ยังไม่มีในระบบ","position":"ประธานโครงการ","work_status":"ปฏิบัติหน้าที่"},
   {"id":"M101","student_id":"005","full_name":"นายทดสอบ สอง","nickname":"","department":"ฝ่ายวิชาการ","position":"หัวหน้าฝ่าย","work_status":"ปฏิบัติหน้าที่"}
 ]$$::jsonb, false, true));
 select test.eq((select jsonb_array_length(j -> 'errors') from res where step = 'dry_no_dept'), 1, 'missing department is an error');
@@ -50,8 +50,9 @@ insert into res values ('save', public.admin_import_members($$[
   {"id":"M003","student_id":"6500003","full_name":"หัวหน้าวิชาการ","nickname":null,"department":"ฝ่ายวิชาการ","position":"หัวหน้า","work_status":"ปฏิบัติหน้าที่"}
 ]$$::jsonb, true, false));
 select test.eq((select (j ->> 'saved')::boolean from res where step = 'save'), true, 'saved');
+-- "ฝ่ายอำนวยการ/ประธานโครงการ" เป็นหนึ่งใน 7 ฝ่ายที่ระบบสร้างไว้แล้ว (migration 007) จึงไม่ใช่ฝ่ายใหม่
 select test.eq((select j -> 'new_departments' from res where step = 'save'),
-  '["ฝ่ายอำนวยการ/ประธานโครงการ", "กลุ่มพิธีการและงานลงทะเบียน"]'::jsonb, 'new departments');
+  '["กลุ่มพิธีการและงานลงทะเบียน"]'::jsonb, 'new departments');
 select test.eq((select row((j ->> 'inserted')::int, (j ->> 'updated')::int, (j ->> 'unchanged')::int)::text from res where step = 'save'),
   row(1, 1, 1)::text, 'counts');
 select test.ok((select j::text from res where step = 'save') like '%ผูกกับบัญชี president@example.ac.th%', 'warns when linked account name changes');

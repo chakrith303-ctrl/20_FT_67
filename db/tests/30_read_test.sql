@@ -16,10 +16,11 @@ select test.throws($$select * from public.app_setting$$, 'app_setting not readab
 select test.throws($$select * from public.registration_attempt$$, 'attempts not readable', '42501');
 reset role;
 
--- HEAD ฝ่ายวิชาการ
+-- HEAD ฝ่ายวิชาการ: อ่าน "งาน" (TASK) ข้ามฝ่ายได้ (อ่านอย่างเดียว) — โมดูลอื่นยังจำกัดเฉพาะฝ่ายตน
 select test.login('head@example.ac.th');
 set local role app_user;
-select test.eq((select array_agg(id order by id) from public.task), '{T001,T002,T006,T007,T008}'::text[], 'head tasks');
+select test.eq((select array_agg(id order by id) from public.task),
+  '{T001,T002,T003,T004,T005,T006,T007,T008}'::text[], 'head tasks (cross-department read)');
 select test.eq((select array_agg(id order by id) from public.document), '{D001,D002}'::text[], 'head documents');
 select test.eq((select array_agg(id order by id) from public.letter), '{L001}'::text[], 'head letters');
 select test.eq((select array_agg(id order by id) from public.budget), '{B001}'::text[], 'head budget');
@@ -33,10 +34,11 @@ select test.eq((select array_agg(user_id) from public.user_account), '{U002}'::t
 select test.eq((select count(*) from public.audit_log)::int, 0, 'head no audit');
 reset role;
 
--- MEMBER: เฉพาะงานที่ตนรับผิดชอบหลัก/ร่วม
+-- MEMBER: เห็นงานทั้งฝ่ายตน (ไม่ใช่แค่ที่ตนรับผิดชอบ)
 select test.login('member@example.ac.th');
 set local role app_user;
-select test.eq((select array_agg(id order by id) from public.task), '{T002,T006}'::text[], 'member own tasks');
+select test.eq((select array_agg(id order by id) from public.task),
+  '{T001,T002,T006,T007,T008}'::text[], 'member sees own department tasks');
 select test.eq((select count(*) from public.document)::int, 0, 'member no documents');
 select test.eq((select count(*) from public.budget)::int, 0, 'member no budget');
 select test.eq((select count(*) from public.registration)::int, 0, 'member no registration');

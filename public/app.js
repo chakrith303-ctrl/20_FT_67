@@ -146,7 +146,25 @@ function renderWriteFields() {
     return `<label for="${id}">${esc(LABELS[key] || key)}</label>${input}`;
   }).join('');
 }
-document.querySelectorAll('input[name=kind]').forEach((r) => r.addEventListener('change', renderWriteFields));
+function updateDeleteBtn() {
+  show('btnDeleteTask', currentKind() === 'tasks' && $('wId').value.trim() !== '');
+}
+document.querySelectorAll('input[name=kind]').forEach((r) => r.addEventListener('change', () => { renderWriteFields(); updateDeleteBtn(); }));
+$('wId').addEventListener('input', updateDeleteBtn);
+
+$('btnDeleteTask').addEventListener('click', async () => {
+  const id = $('wId').value.trim();
+  if (!id) return;
+  if (!confirm(`ลบงาน ${id}?`)) return;
+  try {
+    await api(`/tasks/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    msg('writeMsg', `ลบ ${id} แล้ว`, true);
+    $('formWrite').reset();
+    updateDeleteBtn();
+  } catch (e) {
+    msg('writeMsg', e.message, false);
+  }
+});
 
 $('formWrite').addEventListener('submit', async (ev) => {
   ev.preventDefault();
@@ -298,6 +316,7 @@ async function boot() {
   $('moduleSel').innerHTML = p.readable_modules
     .map((m) => `<option value="${esc(m)}">${esc(MODULE_NAMES[m] || m)}</option>`).join('');
   renderWriteFields();
+  updateDeleteBtn();
   openTab(p.can_view_dashboard ? 'dashboard' : 'modules');
 }
 

@@ -42,7 +42,7 @@ reset role;
 
 select test.login('member@example.ac.th');
 set local role app_user;
-select test.eq(public.get_my_profile() -> 'writable_modules', '[]'::jsonb, 'member cannot write');
+select test.eq(public.get_my_profile() -> 'writable_modules', '["TASK"]'::jsonb, 'member can only write task');
 select test.eq(public.get_my_profile() -> 'readable_modules', '["TASK"]'::jsonb, 'member reads task only');
 select test.eq((public.get_my_profile() ->> 'can_view_dashboard')::boolean, false, 'member dashboard disabled');
 reset role;

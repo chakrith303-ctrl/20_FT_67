@@ -120,6 +120,34 @@ test('เขียนงาน: ฝ่ายตนได้, ฝ่ายอื�
     assert.strictEqual(member.status, 403);
 });
 
+test('MEMBER: เห็นงานทั้งฝ่ายตน, เพิ่ม/แก้ไข/ลบได้เฉพาะงานของตัวเอง', async () => {
+    const list = await call('member@example.ac.th', 'GET', '/modules/TASK');
+    const listIds = list.body.map((r) => r.id);
+    for (const id of ['T001', 'T002', 'T006', 'T007', 'T008']) assert.ok(listIds.includes(id), id);
+    assert.ok(list.body.every((r) => r.department === 'ฝ่ายวิชาการ'), 'member sees own department only');
+
+    const own = await call('member@example.ac.th', 'POST', '/tasks',
+        { department: 'ฝ่ายวิชาการ', name: 'งานสมาชิก', owner_main_id: 'M005' });
+    assert.strictEqual(own.status, 201, JSON.stringify(own.body));
+
+    const notMine = await call('member@example.ac.th', 'POST', '/tasks',
+        { department: 'ฝ่ายวิชาการ', name: 'x', owner_main_id: 'M003' });
+    assert.strictEqual(notMine.status, 403);
+
+    const patchOwn = await call('member@example.ac.th', 'PATCH', `/tasks/${own.body.id}`, { status: 'เสร็จสิ้น' });
+    assert.strictEqual(patchOwn.status, 200);
+
+    const patchOthers = await call('member@example.ac.th', 'PATCH', '/tasks/T001', { status: 'เสร็จสิ้น' });
+    assert.strictEqual(patchOthers.status, 404);
+
+    const deleteOthers = await call('member@example.ac.th', 'DELETE', '/tasks/T001');
+    assert.strictEqual(deleteOthers.status, 404);
+
+    const deleteOwn = await call('member@example.ac.th', 'DELETE', `/tasks/${own.body.id}`);
+    assert.strictEqual(deleteOwn.status, 200);
+    assert.strictEqual(deleteOwn.body.ok, true);
+});
+
 test('Invite + สมัครสมาชิก: email จาก session, บทบาทจากตำแหน่ง, ล้มเหลวได้ข้อความกลาง ๆ', async () => {
     assert.strictEqual((await call('head@example.ac.th', 'POST', '/invites', { member_id: 'M008' })).status, 403);
 

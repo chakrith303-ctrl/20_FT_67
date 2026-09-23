@@ -16,7 +16,8 @@ select test.throws($$update public.budget set actual_cost = 0$$, 'budget update 
 select test.throws($$insert into public.user_account (member_id, email, role) values ('M008', 'x@example.ac.th', 'ADMIN')$$, 'user_account write blocked', '42501');
 select test.throws($$update public.user_account set role = 'ADMIN'$$, 'role change blocked', '42501');
 select test.throws($$update public.feature_flag set state = 'ENABLED'$$, 'flags not writable via API', '42501');
-select test.throws($$delete from public.task where id = 'T001'$$, 'delete blocked', '42501');
+-- PRESIDENT ไม่ใช่ ADMIN และไม่ใช่เจ้าของงาน — ลบไม่ได้ (ถูกกรองด้วย RLS ไม่ error แต่ 0 แถว)
+select test.eq(test.affected($$delete from public.task where id = 'T001'$$), 0, 'president cannot delete task');
 select test.throws($$insert into public.audit_log (user_id, action, table_name) values ('x', 'x', 'x')$$, 'audit not writable', '42501');
 
 -- ห้ามกำหนดรหัส / เวลาระบบเอง
@@ -51,11 +52,38 @@ select test.eq(test.affected($$insert into public.task (department, name) values
 reset role;
 select test.eq((select status from public.task where id = 'T004'), 'กำลังดำเนินการ', 'other dept untouched');
 
--- MEMBER: เขียนไม่ได้
+-- MEMBER (M005, ฝ่ายวิชาการ): เห็นงานทั้งฝ่ายตน แต่เพิ่ม/แก้ไข/ลบได้เฉพาะงานที่ตนรับผิดชอบหลัก/ร่วม
 select test.login('member@example.ac.th');
 set local role app_user;
-select test.throws($$insert into public.task (department, name) values ('ฝ่ายวิชาการ', 'x')$$, 'member insert', '42501');
-select test.eq(test.affected($$update public.task set status = 'ยกเลิก' where id = 'T002'$$), 0, 'member update');
+
+-- เพิ่มงานของตัวเองในฝ่ายตนได้ (ตั้ง owner_main_id เป็นตัวเอง)
+do $$
+declare v text;
+begin
+  insert into public.task (department, name, owner_main_id) values ('ฝ่ายวิชาการ', 'งานของ M005', 'M005') returning id into v;
+  perform test.ok(v ~ '^T[0-9]{3,}$', 'member inserts own task ' || v);
+end $$;
+-- เพิ่มงานที่ไม่ได้เป็นเจ้าของ/ผู้รับผิดชอบร่วม = ไม่ได้
+select test.throws($$insert into public.task (department, name, owner_main_id) values ('ฝ่ายวิชาการ', 'x', 'M003')$$,
+  'member insert task owned by someone else', '42501');
+-- เพิ่มงานฝ่ายอื่น = ไม่ได้ แม้ตั้ง owner เป็นตัวเอง
+select test.throws($$insert into public.task (department, name, owner_main_id) values ('ฝ่ายสถานที่', 'x', 'M005')$$,
+  'member insert other dept', '42501');
+
+-- แก้ไขงานที่ตนเป็นผู้รับผิดชอบหลัก (T006) ได้
+select test.eq(test.affected($$update public.task set status = 'ยกเลิก' where id = 'T006'$$), 1, 'member updates own task');
+-- แก้ไขงานที่ตนเป็นผู้รับผิดชอบร่วม (T002) ได้
+select test.eq(test.affected($$update public.task set status = 'ยกเลิก' where id = 'T002'$$), 1, 'member updates co-owned task');
+-- แก้ไขงานของคนอื่นที่ตนไม่เกี่ยวข้อง (T001) ไม่ได้
+select test.eq(test.affected($$update public.task set status = 'ยกเลิก' where id = 'T001'$$), 0, 'member cannot update others task');
+-- ย้ายงานของตัวเองออกจากความรับผิดชอบ (ไม่เป็นทั้งเจ้าของหลัก/ร่วมหลังแก้) = ไม่ได้
+select test.throws($$update public.task set owner_main_id = 'M003' where id = 'T006'$$,
+  'member cannot give own task away', '42501');
+
+-- ลบงานของคนอื่นไม่ได้
+select test.eq(test.affected($$delete from public.task where id = 'T001'$$), 0, 'member cannot delete others task');
+-- ลบงานของตัวเองได้
+select test.eq(test.affected($$delete from public.task where id = 'T006'$$), 1, 'member deletes own task');
 reset role;
 
 -- ปิด flag WRITE:TASK → เขียนไม่ได้ทันที

@@ -209,6 +209,14 @@ router.patch('/:kind(tasks|documents)/:id', handle(async (req, res) => {
     res.json(rows[0]);
 }));
 
+// ---------- ลบงาน: ADMIN ลบได้ทุกงาน, MEMBER ลบได้เฉพาะงานที่ตนรับผิดชอบหลัก/ร่วม (ฐานข้อมูลตรวจสิทธิ์) ----------
+router.delete('/tasks/:id', handle(async (req, res) => {
+    const rows = await withUser(req.session.user, async (db) =>
+        (await db.query('DELETE FROM public.task WHERE id = $1 RETURNING id', [req.params.id])).rows);
+    if (!rows.length) return res.status(404).json({ error: 'not_found', message: 'ไม่พบรายการ หรือไม่มีสิทธิ์ลบ' });
+    res.json({ ok: true, id: rows[0].id });
+}));
+
 // ---------- Invite (ระดับโครงการเท่านั้น — ฐานข้อมูลตรวจสิทธิ์) ----------
 router.get('/invites', handle(async (req, res) => {
     const rows = await withUser(req.session.user, async (db) => (await db.query(
