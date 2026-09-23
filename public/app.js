@@ -14,6 +14,7 @@ const LABELS = {
   title: 'หัวข้อ', review_result: 'ผลการตรวจ', reviewer: 'ผู้ตรวจ', reviewed_at: 'วันที่ตรวจ', review_note: 'หมายเหตุการตรวจ',
   remaining_days: 'เหลือ (วัน)', invite_id: 'รหัส invite', member_id: 'รหัสสมาชิก', created_by: 'สร้างโดย',
   created_date: 'สร้างเมื่อ', expires_at: 'หมดอายุ', used_date: 'ใช้เมื่อ', used_by_user_id: 'ผู้ใช้',
+  student_id: 'รหัสนักศึกษา', nickname: 'ชื่อเล่น', position: 'ตำแหน่ง', work_status: 'สถานะการทำงาน',
   question_id: 'รหัสคำถาม', question: 'คำถาม', sort_order: 'ลำดับ', response_id: 'รหัสคำตอบ',
   evaluation_id: 'รหัสแบบประเมิน', registration_id: 'รหัสผู้ลงทะเบียน', answers: 'คำตอบ', submitted_at: 'ส่งเมื่อ',
 };
@@ -186,6 +187,60 @@ $('formInvite').addEventListener('submit', async (ev) => {
   }
 });
 
+// ---------- นำเข้าสมาชิก (ADMIN) ----------
+let importChecked = '';
+
+function renderImport(r, saved) {
+  const issues = (list, cls) => list.length
+    ? `<table><thead><tr><th>แถว</th><th>รหัส</th><th>รายละเอียด</th></tr></thead><tbody>` +
+      list.map((x) => `<tr class="${cls}"><td>${esc(x.row)}</td><td>${esc(x.id)}</td><td>${esc(x.message)}</td></tr>`).join('') +
+      '</tbody></table>'
+    : '<p class="muted">ไม่มี</p>';
+  const head = saved
+    ? `<p class="ok"><b>นำเข้าแล้ว</b></p>`
+    : `<p><b>ผลการตรวจสอบ</b> (ยังไม่ได้บันทึก)${r.header_detected ? ' · พบแถวหัวคอลัมน์' : ''}</p>`;
+  $('importResult').innerHTML = head +
+    `<div class="grid">
+      <div class="kpi card"><div class="v">${esc(r.rows)}</div><div class="l">แถวทั้งหมด</div></div>
+      <div class="kpi card"><div class="v">${esc(r.inserted)}</div><div class="l">${saved ? 'เพิ่มแล้ว' : 'จะเพิ่มใหม่'}</div></div>
+      <div class="kpi card"><div class="v">${esc(r.updated)}</div><div class="l">${saved ? 'อัปเดตแล้ว' : 'จะอัปเดต'}</div></div>
+      <div class="kpi card"><div class="v">${esc(r.unchanged)}</div><div class="l">ไม่เปลี่ยน</div></div>
+      <div class="kpi card"><div class="v">${esc(r.errors.length)}</div><div class="l">ข้อผิดพลาด</div></div>
+      <div class="kpi card"><div class="v">${esc(r.warnings.length)}</div><div class="l">คำเตือน</div></div>
+    </div>` +
+    (r.new_departments.length ? `<p>ฝ่ายที่จะเพิ่มใหม่: ${r.new_departments.map(esc).join(', ')}</p>` : '') +
+    `<h3 class="err">ข้อผิดพลาด (ต้องแก้ในชีทก่อนนำเข้า)</h3>${issues(r.errors, 'err')}` +
+    `<h3>คำเตือน (นำเข้าได้)</h3>${issues(r.warnings, '')}` +
+    `<h3>ตัวอย่างข้อมูลที่อ่านได้</h3><div class="scroll">${table(r.preview,
+      ['id', 'student_id', 'full_name', 'nickname', 'department', 'position', 'work_status'])}</div>`;
+}
+
+async function runImport(dryRun) {
+  const text = $('importText').value;
+  const body = { text, create_departments: $('importCreateDepts').checked, dry_run: dryRun };
+  msg('importMsg', dryRun ? 'กำลังตรวจสอบ…' : 'กำลังนำเข้า…', true);
+  $('btnImportSave').disabled = true;
+  try {
+    const r = await api('/admin/members/import', { method: 'POST', body });
+    msg('importMsg', '', true);
+    renderImport(r, !dryRun && r.saved);
+    importChecked = dryRun && r.ok ? text + '|' + body.create_departments : '';
+    $('btnImportSave').disabled = !importChecked;
+    if (!dryRun && r.saved) meta = await api('/meta').catch(() => meta);
+  } catch (e) {
+    msg('importMsg', e.message, false);
+  }
+}
+$('btnImportCheck').addEventListener('click', () => runImport(true));
+$('btnImportSave').addEventListener('click', () => {
+  if (importChecked !== $('importText').value + '|' + $('importCreateDepts').checked) {
+    return msg('importMsg', 'ข้อมูลเปลี่ยนหลังตรวจสอบ — กด ตรวจสอบ อีกครั้ง', false);
+  }
+  if (confirm('ยืนยันนำเข้าสมาชิก?')) runImport(false);
+});
+['importText', 'importCreateDepts'].forEach((id) => $(id).addEventListener('input', () => { $('btnImportSave').disabled = true; }));
+$('importCreateDepts').addEventListener('change', () => { $('btnImportSave').disabled = true; });
+
 // ---------- สมัครสมาชิก ----------
 $('formRegister').addEventListener('submit', async (ev) => {
   ev.preventDefault();
@@ -239,6 +294,7 @@ async function boot() {
   if (p.can_view_dashboard) tabBtn('dashboard').classList.remove('hidden');
   if (p.writable_modules.length) tabBtn('writer').classList.remove('hidden');
   if (p.can_create_invite) tabBtn('invite').classList.remove('hidden');
+  if (p.role === 'ADMIN') tabBtn('importer').classList.remove('hidden');
   $('moduleSel').innerHTML = p.readable_modules
     .map((m) => `<option value="${esc(m)}">${esc(MODULE_NAMES[m] || m)}</option>`).join('');
   renderWriteFields();

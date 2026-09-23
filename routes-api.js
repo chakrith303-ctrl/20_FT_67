@@ -7,6 +7,7 @@
 
 const express = require('express');
 const { withUser } = require('./db');
+const { parseMemberPaste } = require('./import-members');
 
 const router = express.Router();
 
@@ -227,6 +228,19 @@ router.post('/invites', handle(async (req, res) => {
 router.post('/invites/:id/revoke', handle(async (req, res) => {
     await withUser(req.session.user, (db) => db.query('SELECT public.revoke_invite($1)', [req.params.id]));
     res.json({ ok: true });
+}));
+
+// ---------- นำเข้าสมาชิกจากชีท MEMBER (ADMIN เท่านั้น — ฐานข้อมูลตรวจสิทธิ์) ----------
+// body: { text: ข้อความที่วางจาก Google Sheets, create_departments: boolean, dry_run: boolean }
+router.post('/admin/members/import', handle(async (req, res) => {
+    const parsed = parseMemberPaste(req.body.text);
+    if (!parsed.rows.length) throw badRequest('ไม่พบแถวที่มีรหัสสมาชิก');
+    const dryRun = req.body.dry_run !== false;
+    const result = await withUser(req.session.user, async (db) => (await db.query(
+        'SELECT public.admin_import_members($1::jsonb, $2, $3) AS r',
+        [JSON.stringify(parsed.rows), req.body.create_departments === true, dryRun]
+    )).rows[0].r);
+    res.json({ ...result, header_detected: parsed.header_detected, preview: parsed.rows.slice(0, 200) });
 }));
 
 module.exports = { router, requireFetchHeader };

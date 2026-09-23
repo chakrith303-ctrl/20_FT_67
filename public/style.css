@@ -27,7 +27,7 @@ label { display: block; margin: 8px 0 4px; font-size: 14px; }
 .row label { display: inline-flex; gap: 4px; margin: 0 12px 0 0; }
 input, select, textarea { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px;
   font: inherit; background: var(--card); color: var(--ink); }
-input[type=radio] { width: auto; }
+input[type=radio], input[type=checkbox] { width: auto; }
 button, .button { display: inline-block; margin-top: 10px; padding: 8px 14px; border: 0; border-radius: 6px;
   background: var(--accent); color: #fff; font: inherit; cursor: pointer; text-decoration: none; }
 .row button { margin-top: 0; }

@@ -23,6 +23,7 @@
   <button type="button" data-tab="modules">ข้อมูล</button>
   <button type="button" data-tab="writer" class="hidden">บันทึกงาน/เอกสาร</button>
   <button type="button" data-tab="invite" class="hidden">Invite</button>
+  <button type="button" data-tab="importer" class="hidden">นำเข้าสมาชิก</button>
 </nav>
 
 <main>
@@ -93,6 +94,27 @@
     <h3>Invite ล่าสุด</h3>
     <div class="scroll" id="inviteList"></div>
   </section>
+  <!-- นำเข้าสมาชิก (ADMIN) -->
+  <section id="importer" class="card hidden tab">
+    <h2>นำเข้าสมาชิกจาก Google Sheets</h2>
+    <ol class="muted">
+      <li>เปิดชีท <b>MEMBER</b> → คลิกหัวคอลัมน์ <b>A</b> ค้างไว้แล้วลากถึง <b>M</b> (หรือเลือกช่วง A1:M ถึงแถวสุดท้าย) → <b>Ctrl+C</b></li>
+      <li>วางในช่องด้านล่าง (<b>Ctrl+V</b>) → กด <b>ตรวจสอบ</b> ก่อนเสมอ</li>
+      <li>ถ้าไม่มีข้อผิดพลาด กด <b>นำเข้า</b> — รหัสสมาชิกเดิมจะถูกอัปเดต ไม่มีการลบใคร</li>
+    </ol>
+    <p class="muted">นำเข้าเฉพาะ รหัส, รหัสนักศึกษา, ชื่อ, ชื่อเล่น, ฝ่าย, ตำแหน่ง, สถานะ — ไม่นำเข้าเบอร์โทร / Line / อีเมล</p>
+    <textarea id="importText" rows="8" placeholder="วางข้อมูลจากชีท MEMBER ที่นี่"></textarea>
+    <div class="row">
+      <label><input type="checkbox" id="importCreateDepts"> เพิ่มฝ่ายที่ยังไม่มีในระบบให้อัตโนมัติ</label>
+    </div>
+    <div class="row">
+      <button id="btnImportCheck" type="button">ตรวจสอบ</button>
+      <button id="btnImportSave" type="button" disabled>นำเข้า</button>
+    </div>
+    <div id="importMsg" class="msg"></div>
+    <div id="importResult"></div>
+  </section>
+
   <p class="muted"><a href="/privacy.html">นโยบายความเป็นส่วนตัว</a></p>
 </main>
 </body>

@@ -42,7 +42,7 @@ app.use((req, res, next) => {
     next();
 });
 
-app.use(express.json({ limit: '100kb' }));
+app.use(express.json({ limit: '1mb' }));
 
 // ---------- Session: cookie ที่เซ็นด้วย SESSION_SECRET (แก้ไขฝั่ง browser ไม่ได้) ----------
 app.use(cookieSession({

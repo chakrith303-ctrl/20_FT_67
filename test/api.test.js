@@ -147,3 +147,40 @@ test('Invite + สมัครสมาชิก: email จาก session, บ�
     const reuse = await call('api-other@example.ac.th', 'POST', '/register', { student_id: '6500008', invite_code: inv.body.code });
     assert.strictEqual(reuse.status, 400);
 });
+
+test('นำเข้าสมาชิก: แยกข้อความจาก Google Sheets (มี/ไม่มีหัวคอลัมน์, เซลล์ขึ้นบรรทัด)', () => {
+    const { parseMemberPaste } = require('../import-members');
+    const header = 'รหัส\nสมาชิก\tรหัส\nนักศึกษา\tคำนำหน้า\tชื่อ\tนามสกุล\tชื่อเล่น\tฝ่ายหลัก\tบทบาท/\nตำแหน่ง\tเบอร์\nโทรศัพท์\tLine\nID\tอีเมล\tสถานะการ\nทำงาน\tหมายเหตุ';
+    // Google Sheets ใส่ "..." ครอบเซลล์ที่มีขึ้นบรรทัด
+    const quotedHeader = header.split('\t').map((h) => (h.includes('\n') ? `"${h}"` : h)).join('\t');
+    const row = 'M002\t029\tนางสาว\tทดสอบ\tสมมติ\tส้ม\tฝ่ายอำนวยการ/ประธานโครงการ\t"รองประธาน\nโครงการ"\t081\tline\ta@b.c\tปฏิบัติหน้าที่\t';
+    const withHeader = parseMemberPaste(`${quotedHeader}\n${row}\n\t\t\t\t\n`);
+    assert.strictEqual(withHeader.header_detected, true);
+    assert.deepStrictEqual(withHeader.rows, [{
+        id: 'M002', student_id: '029', full_name: 'นางสาวทดสอบ สมมติ', nickname: 'ส้ม',
+        department: 'ฝ่ายอำนวยการ/ประธานโครงการ', position: 'รองประธานโครงการ', work_status: 'ปฏิบัติหน้าที่',
+    }]);
+    assert.ok(!JSON.stringify(withHeader.rows).includes('a@b.c'), 'email not imported');
+
+    const noHeader = parseMemberPaste(row.replace('"รองประธาน\nโครงการ"', 'รองประธานโครงการ') + '\r\n');
+    assert.strictEqual(noHeader.header_detected, false);
+    assert.strictEqual(noHeader.rows[0].position, 'รองประธานโครงการ');
+    assert.strictEqual(noHeader.rows[0].work_status, 'ปฏิบัติหน้าที่');
+});
+
+test('นำเข้าสมาชิก API: ADMIN เท่านั้น, ตรวจสอบก่อน, แล้วบันทึก', async () => {
+    const text = 'M200\t901\tนาย\tทดสอบ\tนำเข้า\tเอ\tฝ่ายใหม่ทดสอบ\tสมาชิก\t\t\t\tปฏิบัติหน้าที่\t';
+    assert.strictEqual((await call('president@example.ac.th', 'POST', '/admin/members/import', { text })).status, 403);
+
+    const check = await call('vp@example.ac.th', 'POST', '/admin/members/import', { text });
+    assert.strictEqual(check.status, 200, JSON.stringify(check.body));
+    assert.strictEqual(check.body.saved, false);
+    assert.strictEqual(check.body.errors.length, 1); // ฝ่ายยังไม่มี
+
+    const save = await call('vp@example.ac.th', 'POST', '/admin/members/import', { text, create_departments: true, dry_run: false });
+    assert.strictEqual(save.body.saved, true, JSON.stringify(save.body));
+    assert.strictEqual(save.body.inserted, 1);
+
+    const empty = await call('vp@example.ac.th', 'POST', '/admin/members/import', { text: '   ' });
+    assert.strictEqual(empty.status, 400);
+});
