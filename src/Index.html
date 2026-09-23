@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <style>
+    :root { --bg:#f6f7f9; --card:#fff; --ink:#1d2330; --muted:#667085; --line:#e4e7ec; --accent:#2f5bd3; --bad:#c0392b; --good:#1e8e5a; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: "Sarabun", system-ui, sans-serif; background:var(--bg); color:var(--ink); }
+    header { padding:16px; background:var(--card); border-bottom:1px solid var(--line); display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+    main { max-width:1100px; margin:0 auto; padding:16px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; }
+    .kpi .v { font-size:28px; font-weight:700; } .kpi .l { color:var(--muted); font-size:13px; }
+    label { display:block; margin:8px 0 4px; font-size:14px; }
+    input, select, textarea { width:100%; padding:8px; border:1px solid var(--line); border-radius:6px; font:inherit; }
+    button { margin-top:10px; padding:8px 14px; border:0; border-radius:6px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; }
+    button:disabled { opacity:.5; }
+    table { width:100%; border-collapse:collapse; font-size:13px; } th, td { border-bottom:1px solid var(--line); padding:6px; text-align:left; vertical-align:top; }
+    .scroll { overflow-x:auto; }
+    .msg { margin-top:8px; font-size:14px; } .err { color:var(--bad); } .ok { color:var(--good); }
+    .hidden { display:none; } .muted { color:var(--muted); }
+    code { background:#eef1f6; padding:2px 6px; border-radius:4px; }
+  </style>
+</head>
+<body>
+<header>
+  <strong>ระบบบริหารโครงการ</strong>
+  <span id="who" class="muted">กำลังโหลด…</span>
+</header>
+<main>
+  <!-- สมัครสมาชิก -->
+  <section id="register" class="card hidden">
+    <h2>สมัครสมาชิก</h2>
+    <p class="muted">ระบบใช้อีเมลจากบัญชี Google ที่เข้าสู่ระบบอยู่โดยอัตโนมัติ บทบาทถูกกำหนดจากทะเบียนสมาชิก</p>
+    <label for="studentId">รหัสนักศึกษา</label>
+    <input id="studentId" autocomplete="off">
+    <label for="inviteCode">Invite code</label>
+    <input id="inviteCode" autocomplete="off" placeholder="XXXX-XXXX-…">
+    <button id="btnRegister">สมัคร</button>
+    <div id="regMsg" class="msg"></div>
+  </section>
+
+  <!-- Dashboard -->
+  <section id="dashboard" class="card hidden">
+    <h2>Dashboard <small class="muted" id="dashScope"></small></h2>
+    <div id="kpis" class="grid"></div>
+    <h3>งานเกินกำหนด</h3><div class="scroll" id="overdue"></div>
+    <h3>งานใกล้ครบกำหนด (0–3 วัน)</h3><div class="scroll" id="dueSoon"></div>
+    <h3>เอกสารที่ต้องติดตาม</h3><div class="scroll" id="docTracking"></div>
+    <h3>งานเสร็จแล้วแต่ไม่มีหลักฐาน</h3><div class="scroll" id="noEvidence"></div>
+  </section>
+
+  <!-- อ่านข้อมูลโมดูล -->
+  <section id="modules" class="card hidden">
+    <h2>ข้อมูลโมดูล</h2>
+    <select id="moduleSel"></select>
+    <button id="btnLoadModule">แสดง</button>
+    <div id="moduleMsg" class="msg"></div>
+    <div class="scroll" id="moduleTable"></div>
+  </section>
+
+  <!-- เขียนข้อมูล (TASK / DOCUMENT) -->
+  <section id="writer" class="card hidden">
+    <h2>บันทึกข้อมูล</h2>
+    <label for="writeEntity">โมดูล</label>
+    <select id="writeEntity"></select>
+    <label for="writeId">รหัส (เว้นว่างเพื่อสร้างใหม่)</label>
+    <input id="writeId" placeholder="เช่น T001 / D001">
+    <label for="writeJson">ข้อมูล (JSON: {"หัวคอลัมน์": "ค่า"})</label>
+    <textarea id="writeJson" rows="5">{"ฝ่ายที่รับผิดชอบ": "", "ชื่องาน/กิจกรรม": "", "สถานะงาน": "กำลังดำเนินการ"}</textarea>
+    <button id="btnWrite">บันทึก</button>
+    <div id="writeMsg" class="msg"></div>
+  </section>
+
+  <!-- สร้าง invite -->
+  <section id="invite" class="card hidden">
+    <h2>สร้าง Invite</h2>
+    <label for="inviteMember">รหัสสมาชิก</label>
+    <input id="inviteMember" placeholder="M001">
+    <button id="btnInvite">สร้าง</button>
+    <div id="inviteMsg" class="msg"></div>
+  </section>
+</main>
+
+<script>
+  var $ = function (id) { return document.getElementById(id); };
+  function esc(v) {
+    return String(v === null || v === undefined ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function show(id) { $(id).classList.remove('hidden'); }
+  function msg(id, text, ok) { $(id).className = 'msg ' + (ok ? 'ok' : 'err'); $(id).textContent = text; }
+  function call(fn, args, cb) {
+    var r = google.script.run.withSuccessHandler(cb).withFailureHandler(function (e) { cb({ ok: false, error: { message: String(e && e.message || e) } }); });
+    r[fn].apply(r, args || []);
+  }
+  function table(rows, cols) {
+    if (!rows || !rows.length) return '<p class="muted">ไม่มีรายการ</p>';
+    cols = cols || Object.keys(rows[0]);
+    return '<table><thead><tr>' + cols.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') +
+      '</tr></thead><tbody>' + rows.map(function (r) {
+        return '<tr>' + cols.map(function (c) { return '<td>' + esc(r[c]) + '</td>'; }).join('') + '</tr>';
+      }).join('') + '</tbody></table>';
+  }
+  function fmt(n) { return (n === null || n === undefined) ? '–' : Number(n).toLocaleString('th-TH'); }
+
+  function renderDashboard(k) {
+    $('dashScope').textContent = k.scope === 'PROJECT' ? '(ทั้งโครงการ)' : '(' + k.scope.replace('DEPARTMENT:', 'ฝ่าย ') + ')';
+    var items = [
+      ['งานทั้งหมด', k.tasks.total], ['กำลังดำเนินการ', k.tasks.inProgress], ['เสร็จสิ้น', k.tasks.done],
+      ['ยกเลิก', k.tasks.cancelled], ['เกินกำหนด', k.tasks.overdue], ['ใกล้ครบกำหนด', k.tasks.dueSoon],
+      ['อัตราสำเร็จ', k.tasks.successRate === null ? '–' : Math.round(k.tasks.successRate * 100) + '%'],
+      ['เอกสารรออนุมัติ', k.documents.pendingApproval], ['เอกสารรอตรวจ', k.documents.pendingReview],
+      ['หนังสือรอตอบรับ', k.letters.awaitingReply], ['ความเสี่ยงเปิดอยู่', k.risks.open], ['ความเสี่ยงปิดแล้ว', k.risks.closed],
+      ['งานไม่มีหลักฐาน', k.evidence.doneWithoutEvidence], ['ลงทะเบียน', k.registrations.total],
+      ['เช็คอินแล้ว', k.registrations.checkedIn], ['งบตั้งต้น', fmt(k.budget.initialBudget)],
+      ['ค่าใช้จ่ายจริง', fmt(k.budget.actualCost)], ['สมาชิกปฏิบัติหน้าที่', k.team.active]
+    ];
+    $('kpis').innerHTML = items.map(function (i) {
+      return '<div class="kpi card"><div class="v">' + esc(typeof i[1] === 'number' ? fmt(i[1]) : i[1]) + '</div><div class="l">' + esc(i[0]) + '</div></div>';
+    }).join('');
+    $('overdue').innerHTML = table(k.tasks.overdueList, ['id', 'name', 'dept', 'status', 'remainingDays']);
+    $('dueSoon').innerHTML = table(k.tasks.dueSoonList, ['id', 'name', 'dept', 'status', 'remainingDays']);
+    $('docTracking').innerHTML = table(k.documents.tracking, ['id', 'name', 'dept', 'status']);
+    $('noEvidence').innerHTML = table(k.evidence.doneWithoutEvidenceList, ['id', 'name', 'dept']);
+  }
+
+  function boot() {
+    call('apiGetMe', [], function (res) {
+      if (!res.ok) {
+        $('who').textContent = res.error.message;
+        if (res.error.code === 'NO_ACCOUNT') show('register');
+        return;
+      }
+      var me = res.data;
+      $('who').textContent = me.email + ' · ' + me.role + (me.department ? ' · ' + me.department : '');
+      if (me.canViewDashboard) {
+        show('dashboard');
+        call('apiGetDashboard', [], function (r) { if (r.ok) renderDashboard(r.data); else $('kpis').textContent = r.error.message; });
+      }
+      if (me.readableModules.length) {
+        show('modules');
+        $('moduleSel').innerHTML = me.readableModules.map(function (m) { return '<option>' + esc(m) + '</option>'; }).join('');
+      }
+      if (me.writableModules.length) {
+        show('writer');
+        $('writeEntity').innerHTML = me.writableModules.map(function (m) { return '<option>' + esc(m) + '</option>'; }).join('');
+      }
+      if (me.canCreateInvite) show('invite');
+    });
+  }
+
+  $('btnRegister').onclick = function () {
+    var b = this; b.disabled = true;
+    // ส่งเฉพาะรหัสนักศึกษา + invite code — อีเมล/บทบาทมาจากเซิร์ฟเวอร์เท่านั้น
+    call('apiRegister', [{ studentId: $('studentId').value, inviteCode: $('inviteCode').value }], function (res) {
+      b.disabled = false;
+      msg('regMsg', res.message || (res.error && res.error.message), res.ok);
+      if (res.ok) setTimeout(function () { location.reload(); }, 1200);
+    });
+  };
+
+  $('btnLoadModule').onclick = function () {
+    var m = $('moduleSel').value;
+    $('moduleTable').innerHTML = '';
+    call('apiReadModule', [m], function (res) {
+      if (!res.ok) return msg('moduleMsg', res.error.message, false);
+      msg('moduleMsg', '', true);
+      if (m === 'EVALUATION') {
+        $('moduleTable').innerHTML = '<h3>คำถาม</h3>' + table(res.data.questions) + '<h3>คำตอบ</h3>' + table(res.data.responses);
+      } else {
+        $('moduleTable').innerHTML = table(res.data);
+      }
+    });
+  };
+
+  $('btnWrite').onclick = function () {
+    var data;
+    try { data = JSON.parse($('writeJson').value); } catch (e) { return msg('writeMsg', 'JSON ไม่ถูกต้อง', false); }
+    var entity = $('writeEntity').value, id = $('writeId').value.trim();
+    var cb = function (res) { msg('writeMsg', res.ok ? 'บันทึกแล้ว: ' + res.data.id : res.error.message, res.ok); };
+    if (id) call('apiUpdateRecord', [entity, id, data], cb); else call('apiCreateRecord', [entity, data], cb);
+  };
+
+  $('btnInvite').onclick = function () {
+    call('apiCreateInvite', [$('inviteMember').value.trim()], function (res) {
+      if (!res.ok) return msg('inviteMsg', res.error.message, false);
+      $('inviteMsg').className = 'msg ok';
+      $('inviteMsg').innerHTML = 'Invite ' + esc(res.data.inviteId) + ' สำหรับ ' + esc(res.data.memberId) +
+        ': <code>' + esc(res.data.code) + '</code><br><small>แสดงครั้งเดียวเท่านั้น ระบบเก็บเฉพาะ hash · หมดอายุ ' + esc(res.data.expiresAt) + '</small>';
+    });
+  };
+
+  boot();
+</script>
+</body>
+</html>
