@@ -14,4 +14,9 @@ jobs:
     if: ${{ vars.APP_URL != '' }}
     steps:
       - name: Call /health
-        run: curl -fsS --max-time 90 --retry 2 "${{ vars.APP_URL }}/health"
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          url="$(printf '%s' "$APP_URL" | tr -d '[:space:]')"
+          url="${url%/}"
+          curl -fsS --max-time 90 --retry 2 "$url/health"
