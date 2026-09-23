@@ -10,7 +10,7 @@ const LABELS = {
   status: 'สถานะ', related_document_ids: 'เอกสารที่เกี่ยวข้อง', evidence_ids: 'รหัสหลักฐาน', start_date: 'วันเริ่ม',
   due_date: 'กำหนดเสร็จ', note: 'หมายเหตุ', updated_at: 'แก้ไขล่าสุด', task_id: 'รหัสงานที่เกี่ยวข้อง', link: 'ลิงก์',
   subject: 'เรื่อง', recipient: 'ผู้รับ', full_name: 'ชื่อ-นามสกุล', contact: 'ติดต่อ', registered_at: 'ลงทะเบียนเมื่อ',
-  checked_in_at: 'เช็คอินเมื่อ', item: 'รายการ', initial_budget: 'งบประมาณตั้งต้น', actual_cost: 'ค่าใช้จ่ายจริง',
+  checkin_status: 'สถานะเช็คอิน', checked_in_at: 'เช็คอินเมื่อ', item: 'รายการ', initial_budget: 'งบประมาณตั้งต้น', actual_cost: 'ค่าใช้จ่ายจริง',
   title: 'หัวข้อ', review_result: 'ผลการตรวจ', reviewer: 'ผู้ตรวจ', reviewed_at: 'วันที่ตรวจ', review_note: 'หมายเหตุการตรวจ',
   remaining_days: 'เหลือ (วัน)', invite_id: 'รหัส invite', member_id: 'รหัสสมาชิก', created_by: 'สร้างโดย',
   created_date: 'สร้างเมื่อ', expires_at: 'หมดอายุ', used_date: 'ใช้เมื่อ', used_by_user_id: 'ผู้ใช้',

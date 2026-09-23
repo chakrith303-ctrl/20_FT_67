@@ -38,3 +38,18 @@ select test.eq(private.my_role(), 'HEAD'::public.app_role, 'member accounts unch
 reset role;
 
 rollback;
+
+-- ค่าสถานะตรงกับ dropdown ในไฟล์ FT20_CONTROL_CENTER
+begin;
+select test.eq((select array_agg(value order by sort_order) from public.status_option where entity = 'TASK'),
+  '{ยังไม่เริ่ม,กำลังดำเนินการ,รอดำเนินการ,เสร็จสิ้น,ล่าช้า,ยกเลิก}'::text[], 'task statuses');
+select test.eq((select array_agg(value order by sort_order) from public.status_option where entity = 'MEMBER'),
+  '{ปฏิบัติหน้าที่,พักการปฏิบัติหน้าที่,พ้นสภาพ/ลาออก}'::text[], 'member statuses');
+select test.eq((select array_agg(value order by sort_order) from public.status_option where entity = 'LETTER'),
+  '{รอส่ง,ส่งแล้ว-รอตอบรับ,ตอบรับแล้ว,ปฏิเสธ,ไม่ต้องตอบรับ}'::text[], 'letter statuses');
+select test.eq((select array_agg(value order by sort_order) from public.status_option where entity = 'RISK'),
+  '{ยังไม่แก้ไข,กำลังแก้ไข,รอติดตามผล,แก้ไขเสร็จสิ้น,ปิดประเด็น}'::text[], 'risk statuses');
+select test.eq((select array_agg(value order by sort_order) from public.status_option where entity = 'REGISTRATION_CHECKIN'),
+  '{ยังไม่เช็คอิน,เช็คอินแล้ว,ขาดการเข้าร่วม}'::text[], 'checkin statuses');
+select test.eq((select count(*) from public.registration where checkin_status = 'เช็คอินแล้ว')::int, 2, 'checkin column used');
+rollback;

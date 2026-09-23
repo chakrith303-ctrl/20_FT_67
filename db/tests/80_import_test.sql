@@ -39,7 +39,7 @@ select test.eq((select j #>> '{errors,0,message}' from res where step = 'sid_tak
 
 -- ห้ามล็อกตัวเองออก (M002 = บัญชีที่กำลังนำเข้า)
 insert into res values ('self_lock', public.admin_import_members($$[
-  {"id":"M002","student_id":"6500002","full_name":"รองประธาน","department":"ฝ่ายบริหาร","position":"รองประธานโครงการ","work_status":"พ้นสภาพ"}
+  {"id":"M002","student_id":"6500002","full_name":"รองประธาน","department":"ฝ่ายบริหาร","position":"รองประธานโครงการ","work_status":"พ้นสภาพ/ลาออก"}
 ]$$::jsonb, false, true));
 select test.ok((select j #>> '{errors,0,message}' from res where step = 'self_lock') like 'แถวนี้เป็นของบัญชีคุณเอง%', 'self lockout blocked');
 

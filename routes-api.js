@@ -121,7 +121,7 @@ const MODULE_QUERIES = {
     DOCUMENT: `SELECT id, department, task_id, name, link, status, note, updated_at
                FROM public.document ORDER BY id`,
     LETTER: `SELECT id, department, task_id, subject, recipient, status, note FROM public.letter ORDER BY id`,
-    REGISTRATION: `SELECT id, full_name, contact, status, registered_at, checked_in_at
+    REGISTRATION: `SELECT id, full_name, contact, status, checkin_status, registered_at, checked_in_at
                    FROM public.registration ORDER BY id`,
     BUDGET: `SELECT id, department, item, initial_budget, actual_cost, note FROM public.budget ORDER BY id`,
     RISK: `SELECT id, department, task_id, title, status, note FROM public.risk_issue ORDER BY id`,

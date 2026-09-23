@@ -60,7 +60,7 @@ select test.login('member@example.ac.th');
 set local role app_user;
 select test.eq(private.my_role(), null, 'unmapped position has no role');
 reset role;
-update public.member set position = 'สมาชิก', work_status = 'พ้นสภาพ' where id = 'M005';
+update public.member set position = 'สมาชิก', work_status = 'พ้นสภาพ/ลาออก' where id = 'M005';
 select test.login('member@example.ac.th');
 set local role app_user;
 select test.eq(private.my_role(), null, 'inactive member has no role');
