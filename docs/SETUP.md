@@ -18,8 +18,10 @@
 3. รอประมาณ 2 นาที
 4. กดปุ่ม **Connect** (ด้านบน) → เลือก **Session pooler** → คัดลอก URI
    หน้าตาประมาณ `postgresql://postgres.xxxx:[YOUR-PASSWORD]@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres`
-   แทน `[YOUR-PASSWORD]` ด้วยรหัสผ่านจากข้อ 2 → นี่คือค่า **`DATABASE_URL`**
+   แทน `[YOUR-PASSWORD]` ด้วยรหัสผ่านจากข้อ 2 (ลบวงเล็บ `[ ]` ด้วย) → นี่คือค่า **`DATABASE_URL`**
    (ต้องใช้ *Session pooler* เพราะ Render ต่อแบบ Direct connection ไม่ได้)
+   - รหัสผ่านควรมีแค่ตัวอักษรอังกฤษ + ตัวเลข — อักขระพิเศษ (`@ # / ? %`) ทำให้ URI เพี้ยน
+   - ถ้า Render ขึ้น `password authentication failed` → Project Settings → Database → Reset database password
 5. ปิดช่องทาง Data API ของ Supabase (ระบบนี้เข้าถึงข้อมูลผ่านเว็บของเราเท่านั้น):
    **Project Settings → Data API** → ปิด **Enable Data API** (ถ้ามีตัวเลือกนี้)
    — ไม่ปิดก็ไม่เป็นไร เพราะฐานข้อมูลถูกตั้งไม่ให้ Data API อ่าน/เขียนอะไรได้อยู่แล้ว
@@ -60,7 +62,7 @@
    | `GOOGLE_CLIENT_ID` | จากขั้น B ข้อ 3 |
    | `GOOGLE_CLIENT_SECRET` | จากขั้น B ข้อ 3 |
    | `GOOGLE_REDIRECT_URI` | `https://<ชื่อเว็บ>.onrender.com/auth/google/callback` |
-   | `GOOGLE_HOSTED_DOMAIN` | โดเมนอีเมลองค์กร เช่น `example.ac.th` (ไม่บังคับ) |
+   | `GOOGLE_HOSTED_DOMAIN` | โดเมน Google Workspace ขององค์กร เช่น `example.ac.th` · ถ้าใช้ Gmail ส่วนตัวใส่ `-` |
 
    `SESSION_SECRET` Render สุ่มให้เอง · `NODE_ENV` ตั้งไว้แล้ว
 4. **Apply** → รอ build ประมาณ 3–5 นาที → ใน **Logs** ต้องเห็น
@@ -76,16 +78,21 @@
 ## D — ตั้งค่าเริ่มต้นในฐานข้อมูล (Supabase → SQL Editor → New query)
 
 ```sql
--- 1) โดเมนอีเมลที่สมัครได้ (คั่นหลายโดเมนด้วย ,) — ว่าง = ไม่มีใครสมัครได้
-update public.app_setting set value = 'example.ac.th' where key = 'allowed_email_domains';
+-- 1) โดเมนอีเมลที่สมัครได้ (คั่นหลายโดเมนด้วย ,) — ว่าง = ไม่มีใครสมัครได้ · Gmail ส่วนตัวใช้ 'gmail.com'
+update public.app_setting set value = 'gmail.com' where key = 'allowed_email_domains';
 
--- 2) รายชื่อฝ่าย
-insert into public.department (name) values ('ฝ่ายบริหาร'), ('ฝ่ายวิชาการ'), ('ฝ่ายสถานที่');
+-- 2) รายชื่อฝ่าย (ต้องตรงกับชื่อใน Google Sheets ทุกตัวอักษร · รันซ้ำได้)
+insert into public.department (name) values ('ฝ่ายบริหาร'), ('ฝ่ายวิชาการ')
+on conflict (name) do nothing;
 
--- 3) สมาชิกอย่างน้อยตัวคุณเอง (ที่เหลือจะนำเข้าจาก Sheets ในขั้นถัดไป)
+-- 3) สมาชิกอย่างน้อยตัวคุณเอง (ฝ่ายต้องอยู่ในข้อ 2 · ตำแหน่งต้องเป็น ประธานโครงการ / รองประธานโครงการ / หัวหน้า / เลขา / สมาชิก)
 insert into public.member (id, full_name, student_id, department, position, work_status)
-values ('M001', 'ชื่อ นามสกุล', 'รหัสนักศึกษา', 'ฝ่ายบริหาร', 'ประธานโครงการ', 'ปฏิบัติหน้าที่');
+values ('M001', 'ชื่อ นามสกุล', 'รหัสนักศึกษา', 'ฝ่ายบริหาร', 'ประธานโครงการ', 'ปฏิบัติหน้าที่')
+on conflict (id) do update set full_name = excluded.full_name, student_id = excluded.student_id,
+  department = excluded.department, position = excluded.position, work_status = excluded.work_status;
 ```
+
+แก้ชื่อฝ่ายภายหลัง: `update public.department set name = 'ชื่อใหม่' where name = 'ชื่อเดิม';` (ข้อมูลที่อ้างถึงเปลี่ยนตามอัตโนมัติ)
 
 ตรวจรายการสถานะที่ระบบยอมรับ (ต้องตรงกับที่ใช้จริงทุกตัวอักษร):
 ```sql
