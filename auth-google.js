@@ -50,7 +50,8 @@ router.get('/auth/google/start', (req, res) => {
         nonce,
         prompt: 'select_account',
     };
-    if (process.env.GOOGLE_HOSTED_DOMAIN) params.hd = process.env.GOOGLE_HOSTED_DOMAIN;
+    const hostedDomain = (process.env.GOOGLE_HOSTED_DOMAIN || '').trim();
+    if (hostedDomain && hostedDomain !== '-') params.hd = hostedDomain;
 
     res.redirect(googleClient().generateAuthUrl(params));
 });
