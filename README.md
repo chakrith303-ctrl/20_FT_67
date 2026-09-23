@@ -1,31 +1,51 @@
-# ระบบบริหารโครงการ (Supabase + Next.js)
+# ระบบบริหารโครงการ
 
-ระบบบริหารโครงการที่ใช้ **Supabase (PostgreSQL)** เป็นฐานข้อมูล กฎทั้งหมด (สิทธิ์ตามบทบาท/ฝ่าย, Feature Flags,
-การสมัครด้วย invite, audit log) บังคับที่ตัวฐานข้อมูลด้วย Row Level Security แม้หน้าเว็บมีบั๊กก็ข้ามกฎไม่ได้
+Express + PostgreSQL · Login ด้วย Google · Deploy ฟรีบน Render + Supabase
 
-ใช้แพ็กเกจฟรีทั้งหมด: Supabase Free + Vercel Hobby + GitHub Actions
+กฎทั้งหมด (สิทธิ์ตามบทบาท/ฝ่าย, Feature Flags, การสมัครด้วย invite, audit log) บังคับที่ **ตัวฐานข้อมูล** —
+server สลับเป็น role `app_user` และตั้งตัวตนผู้ใช้ทุก transaction แม้โค้ดเว็บมีบั๊กก็ข้ามกฎไม่ได้
 
-> ขั้นตอนติดตั้งสำหรับผู้ดูแล: [`docs/SETUP.md`](docs/SETUP.md)
+> ติดตั้ง: [`docs/SETUP.md`](docs/SETUP.md)
 
 ## สถานะงาน
 
 | ขั้น | งาน | สถานะ |
 |---|---|---|
-| 1 | Schema + RLS + ฟังก์ชัน (`supabase/migrations/`) + ชุดทดสอบ | ✅ เสร็จ |
-| 2 | สคริปต์ย้ายข้อมูลจาก Google Sheets | ⏳ รอหัวคอลัมน์จริง (SETUP ขั้น E) |
-| 3 | หน้าเว็บ Next.js (login, สมัคร, Dashboard, ดู/บันทึกข้อมูล, invite) | ⏳ |
-| 4 | GitHub Actions: กันโปรเจกต์ถูกพัก + backup อัตโนมัติ | ⏳ |
+| 1 | ฐานข้อมูล: ตาราง + สิทธิ์ (RLS) + ฟังก์ชัน | ✅ |
+| 3 | เว็บ Express: login Google, สมัคร, Dashboard, ดู/บันทึกข้อมูล, invite | ✅ |
+| 4 | ปลุกเว็บอัตโนมัติ (GitHub Actions) | ✅ · backup อัตโนมัติ ⏳ |
+| 2 | สคริปต์ย้ายข้อมูลจาก Google Sheets | ⏳ รอหัวคอลัมน์จริง (SETUP ขั้น G) |
 
-## โครงสร้าง
+## ไฟล์
 
 ```
-supabase/migrations/
-  20260923000001_schema.sql     ตาราง, รหัส (T001...), ค่าสถานะ, feature flags
-  20260923000002_security.sql   ตัวตน/บทบาท, RLS, สิทธิ์คอลัมน์, audit trigger
-  20260923000003_functions.sql  RPC: get_my_profile, get_dashboard, create_invite, register_self
-supabase/tests/                 ชุดทดสอบ SQL (รันบน PostgreSQL ในเครื่อง)
-scripts/test-db.sh              รัน migration + ทดสอบทั้งหมด
+index.js          entry point: security headers, session, migrate, เปิด server
+db.js             connection pool + withUser() รันคำสั่งในนามผู้ใช้
+migrate.js        รัน db/migrations/*.sql ที่ยังไม่เคยรัน (อัตโนมัติตอนเริ่ม server)
+auth-google.js    /auth/google/start, /auth/google/callback, /auth/logout
+routes-api.js     /api/* (me, register, meta, dashboard, modules, tasks, documents, invites)
+public/           หน้าเว็บ (HTML/CSS/JS ล้วน)
+db/migrations/    โครงสร้างฐานข้อมูล + สิทธิ์ + ฟังก์ชัน
+db/tests/         ชุดทดสอบ SQL
+test/             ชุดทดสอบ API
+render.yaml       ตั้งค่า Render
 ```
+
+## API
+
+| Method | Path | หน้าที่ |
+|---|---|---|
+| GET | `/api/me` | สถานะ login + บทบาท/สิทธิ์ |
+| POST | `/api/register` | สมัคร `{student_id, invite_code}` |
+| GET | `/api/meta` | รายชื่อฝ่าย + สถานะที่ใช้ได้ |
+| GET | `/api/dashboard` | KPI (transaction READ ONLY) |
+| GET | `/api/modules/:module` | TASK, DOCUMENT, LETTER, REGISTRATION, BUDGET, RISK, EVIDENCE, EVALUATION |
+| POST / PATCH | `/api/tasks`, `/api/tasks/:id` | สร้าง/แก้งาน |
+| POST / PATCH | `/api/documents`, `/api/documents/:id` | สร้าง/แก้เอกสาร |
+| GET / POST | `/api/invites`, `/api/invites/:id/revoke` | จัดการ invite (ระดับโครงการ) |
+| GET | `/health` | ตรวจว่าเว็บ + ฐานข้อมูลทำงาน |
+
+คำขอที่ไม่ใช่ GET ต้องมี header `x-requested-with: fetch` (กัน CSRF)
 
 ## 1) Entity ↔ ตาราง ↔ รหัส
 
@@ -39,62 +59,53 @@ scripts/test-db.sh              รัน migration + ทดสอบทั้�
 | RISK/ISSUE | `risk_issue` | RI | |
 | EVIDENCE | `evidence` + `evidence_review` | E | ส่วนตรวจแยกตาราง เห็นเฉพาะระดับโครงการ |
 | MEMBER | `member` | M | |
-| USER_ACCOUNT | `user_account` | U | |
+| USER_ACCOUNT | `user_account` | U | ผูกกับบัญชี Google ด้วย `google_sub` |
 | EVALUATION_QUESTION | `evaluation_question` | EVQ | |
 | EVALUATION_RESPONSE | `evaluation_response` | EV | |
 | AUDIT_LOG | `audit_log` | A | append-only |
 | (ใหม่) INVITE | `invite` | INV | เก็บเฉพาะ SHA-256 |
 
-- รหัสออกอัตโนมัติจาก sequence (ไม่มีวันซ้ำ) ผู้ใช้กำหนดหรือแก้รหัสเองไม่ได้
-- ค่าสถานะต้องอยู่ใน `status_option` (สะกดผิดหรือมีช่องว่างเกินจะบันทึกไม่ได้)
-- ฝ่ายต้องอยู่ใน `department`, รหัสอ้างอิงข้ามตารางเป็น foreign key จริง
+รหัสออกอัตโนมัติ (ไม่ซ้ำ), ค่าสถานะต้องอยู่ใน `status_option`, ฝ่ายต้องอยู่ใน `department`, รหัสอ้างอิงเป็น foreign key จริง
 
 ## 2) Feature Flags
 
-ตาราง `feature_flag` แก้ได้เฉพาะใน SQL Editor (API แก้ไม่ได้) และทุกการเปลี่ยนเข้า audit log
-flag ที่ไม่มีหรือค่าไม่ตรง = ปิด
+ตาราง `feature_flag` — แก้ได้เฉพาะใน SQL Editor, ทุกการเปลี่ยนเข้า audit log, flag ที่ไม่มี/ค่าไม่ตรง = ปิด
 
-- WRITE: `TASK`, `DOCUMENT` = ENABLED · อื่น ๆ = DISABLED_FAIL_CLOSED (ถูกปิดทั้งที่ flag และที่สิทธิ์ตาราง)
+- WRITE: `TASK`, `DOCUMENT` = ENABLED · อื่น ๆ = DISABLED_FAIL_CLOSED
 - READ: ทุกโมดูล ENABLED_READ_ONLY
-- DASHBOARD: ENABLED_READ_ONLY, `DASHBOARD:MEMBER` = DISABLED_FAIL_CLOSED
+- DASHBOARD: ENABLED_READ_ONLY · `DASHBOARD:MEMBER` = DISABLED_FAIL_CLOSED
 - SELF_REGISTRATION, INVITE_CREATION: ENABLED_CONTROLLED
 
 ## สิทธิ์
 
-| บทบาท | อ่าน | เขียน TASK/DOCUMENT | Dashboard | สร้าง invite |
+| บทบาท | อ่าน | เขียน TASK/DOCUMENT | Dashboard | Invite |
 |---|---|---|---|---|
-| ADMIN / PRESIDENT / VICE_PRESIDENT | ทั้งโครงการ | ทุกฝ่าย | ทั้งโครงการ | ได้ |
-| HEAD / SECRETARY | ฝ่ายตน (ไม่เห็นส่วนตรวจหลักฐาน, EVALUATION) | ฝ่ายตน | ฝ่ายตน | ไม่ได้ |
-| MEMBER | งานที่ตนรับผิดชอบหลัก/ร่วม | ไม่ได้ | ปิด | ไม่ได้ |
+| ADMIN / PRESIDENT / VICE_PRESIDENT | ทั้งโครงการ | ทุกฝ่าย | ทั้งโครงการ | ✓ |
+| HEAD / SECRETARY | ฝ่ายตน (ไม่เห็นส่วนตรวจหลักฐาน, EVALUATION) | ฝ่ายตน | ฝ่ายตน | |
+| MEMBER | งานที่ตนรับผิดชอบหลัก/ร่วม | | ปิด | |
 
-- บทบาทคำนวณจากตำแหน่งใน `member` **ทุกครั้ง** (ตรงตัวเป๊ะ) → เปลี่ยนตำแหน่งแล้วสิทธิ์เปลี่ยนทันที
-- ADMIN กำหนดได้เฉพาะใน `user_account` โดยผู้ดูแลฐานข้อมูล
-- บัญชีต้อง ACTIVE และสมาชิกต้อง "ปฏิบัติหน้าที่" จึงมีสิทธิ์ใด ๆ
-- ลบข้อมูลผ่าน API ไม่ได้
+บทบาทคำนวณจากตำแหน่งใน `member` ทุกครั้ง · ADMIN กำหนดได้เฉพาะใน SQL · บัญชีต้อง ACTIVE และสมาชิกต้อง "ปฏิบัติหน้าที่" · ลบข้อมูลผ่านเว็บไม่ได้
 
 ## 3) Dashboard
 
-`get_dashboard(p_today)` คำนวณ KPI ตามนิยามเดิมทุกข้อ
-
-- เป็นฟังก์ชัน **STABLE** ซึ่ง PostgreSQL ไม่ยอมให้เขียนข้อมูล → เขียนกลับไม่ได้โดยโครงสร้าง
-- อ่านผ่าน RLS ของผู้เรียก → HEAD ได้ตัวเลขเฉพาะฝ่ายตนโดยอัตโนมัติ
-- "เหลือเวลา" = `due_date − วันนี้` (เวลาไทย)
-- หลักฐาน: จับคู่ `evidence.task_id` ตรงตัวเท่านั้น ไม่ใช้ `task.evidence_ids` และไม่เขียนกลับ
+`get_dashboard()` เป็นฟังก์ชัน STABLE (PostgreSQL ไม่ยอมให้เขียนข้อมูล) และ API เรียกใน transaction READ ONLY อีกชั้น
+KPI ตามนิยามเดิมทุกข้อ · "เหลือเวลา" = `due_date − วันนี้` (เวลาไทย) · หลักฐานจับคู่ `evidence.task_id` ตรงตัวเท่านั้น
 
 ## 4) Self-Registration (Contract V1.1)
 
-`register_self(student_id, invite_code)`
-
-- อีเมลมาจาก `auth.users` ของ session (ต้องยืนยันแล้วและอยู่ในโดเมนที่อนุญาต)
-- ทุกคำขอเข้าคิวผ่าน advisory lock แล้วตรวจซ้ำทั้งหมดก่อนบันทึก และมี unique constraint กันซ้ำอีกชั้น
-- invite: SHA-256, ใช้ครั้งเดียว, หมดอายุ 7 วัน, ACTIVE ได้ 1 อันต่อคน (unique index)
-- ล้มเหลว → ข้อความเดียวกันทุกกรณี (เหตุผลจริงอยู่ใน `registration_attempt` ซึ่ง API อ่านไม่ได้), จำกัด 5 ครั้ง/15 นาที
-- สำเร็จ → `audit_log` action `SELF_REGISTER`
+- อีเมลมาจาก Google ID token ที่ server ตรวจแล้ว (`email_verified`) — body ที่ส่ง email/role มาถูกละเลย
+- login ใช้ `state` + `nonce` สุ่มใหม่ทุกครั้ง ตรวจตอน callback
+- invite: SHA-256, ใช้ครั้งเดียว, หมดอายุ 7 วัน, ACTIVE ได้ 1 อันต่อคน
+- ตรวจซ้ำทั้งหมดใต้ advisory lock + unique constraint · ล้มเหลว = ข้อความเดียวกันทุกกรณี · จำกัด 5 ครั้ง/15 นาที · สำเร็จ = audit `SELF_REGISTER`
 
 ## ทดสอบ
 
 ```bash
-./scripts/test-db.sh
+npm install
+npm test        # ต้องมี PostgreSQL 15+ ในเครื่อง — GitHub Actions รันให้ทุก push
 ```
 
-ต้องมี PostgreSQL 15+ ในเครื่อง (ใช้ stub ของ `auth` schema แทน Supabase) — GitHub Actions รันให้ทุก push
+## รันในเครื่อง
+
+คัดลอก `.env.example` เป็น `.env` ใส่ค่า (Google redirect เป็น `http://localhost:3000/auth/google/callback`
+และเพิ่ม URI นี้ใน Google Console) แล้ว `NODE_ENV=development npm start`

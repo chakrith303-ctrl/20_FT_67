@@ -2,18 +2,12 @@
 
 create schema test;
 
+-- จำลองสิ่งที่ server ตั้งให้ทุก transaction หลังตรวจ Google ID token แล้ว
 create function test.login(p_email text) returns void
 language plpgsql as $$
-declare
-  v uuid;
 begin
-  if p_email is null then
-    perform set_config('request.jwt.claims', '', true);
-    return;
-  end if;
-  select id into v from auth.users where email = p_email;
-  if v is null then raise exception 'test: no auth user %', p_email; end if;
-  perform set_config('request.jwt.claims', json_build_object('sub', v, 'role', 'authenticated')::text, true);
+  perform set_config('app.sub', coalesce('sub:' || p_email, ''), true);
+  perform set_config('app.email', coalesce(p_email, ''), true);
 end $$;
 
 create function test.eq(p_actual anyelement, p_expected anyelement, p_msg text) returns void
@@ -56,8 +50,8 @@ begin
   return n;
 end $$;
 
-grant usage on schema test to authenticated, anon;
-grant execute on all functions in schema test to authenticated, anon;
+grant usage on schema test to app_user;
+grant execute on all functions in schema test to app_user;
 
 -- ---------------------------------------------------------------------
 update public.app_setting set value = 'example.ac.th' where key = 'allowed_email_domains';
@@ -75,20 +69,12 @@ insert into public.member (id, full_name, student_id, department, position, work
   ('M008', 'สมาชิกใหม่', '6500008', 'ฝ่ายสถานที่', 'สมาชิก', 'ปฏิบัติหน้าที่'),
   ('M009', 'สมาชิกใหม่ 2', '6500009', 'ฝ่ายวิชาการ', 'สมาชิก', 'ปฏิบัติหน้าที่');
 
-insert into auth.users (email, email_confirmed_at)
-select e, now() from unnest(array[
-  'president@example.ac.th', 'vp@example.ac.th', 'head@example.ac.th', 'secretary@example.ac.th',
-  'member@example.ac.th', 'new1@example.ac.th', 'new2@example.ac.th', 'new3@example.ac.th',
-  'new4@example.ac.th', 'outsider@gmail.com'
-]) e;
-insert into auth.users (email, email_confirmed_at) values ('unverified@example.ac.th', null);
-
-insert into public.user_account (user_id, member_id, auth_user_id, email, role) values
-  ('U001', 'M001', (select id from auth.users where email = 'president@example.ac.th'), 'president@example.ac.th', 'PRESIDENT'),
-  ('U002', 'M003', (select id from auth.users where email = 'head@example.ac.th'), 'head@example.ac.th', 'HEAD'),
-  ('U003', 'M005', (select id from auth.users where email = 'member@example.ac.th'), 'member@example.ac.th', 'MEMBER'),
-  ('U004', 'M004', (select id from auth.users where email = 'secretary@example.ac.th'), 'secretary@example.ac.th', 'SECRETARY'),
-  ('U005', 'M002', (select id from auth.users where email = 'vp@example.ac.th'), 'vp@example.ac.th', 'ADMIN');
+insert into public.user_account (user_id, member_id, google_sub, email, role) values
+  ('U001', 'M001', 'sub:president@example.ac.th', 'president@example.ac.th', 'PRESIDENT'),
+  ('U002', 'M003', 'sub:head@example.ac.th', 'head@example.ac.th', 'HEAD'),
+  ('U003', 'M005', 'sub:member@example.ac.th', 'member@example.ac.th', 'MEMBER'),
+  ('U004', 'M004', 'sub:secretary@example.ac.th', 'secretary@example.ac.th', 'SECRETARY'),
+  ('U005', 'M002', 'sub:vp@example.ac.th', 'vp@example.ac.th', 'ADMIN');
 
 insert into public.task (id, department, name, owner_main_id, co_owner_ids, status, evidence_ids, due_date) values
   ('T001', 'ฝ่ายวิชาการ', 'งาน 1', 'M003', '{}', 'กำลังดำเนินการ', '{}', date '2026-09-21'),

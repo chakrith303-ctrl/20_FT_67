@@ -4,10 +4,10 @@ begin;
 create temp table snap as
   select (select count(*) from public.audit_log) as audits,
          (select max(updated_at) from public.task) as task_updated;
-grant select on snap to authenticated;
+grant select on snap to app_user;
 
 select test.login('president@example.ac.th');
-set local role authenticated;
+set local role app_user;
 create temp table k as select public.get_dashboard('2026-09-23') as j;
 
 select test.eq((select j -> 'scope' from k), '"PROJECT"'::jsonb, 'scope');
@@ -33,11 +33,14 @@ select test.eq((select jsonb_path_query_array(j, '$.evidence.done_without_eviden
 select test.eq((select j -> 'registrations' from k), '{"total":3,"checked_in":2}'::jsonb, 'registrations');
 select test.eq((select j -> 'budget' from k), '{"initial_budget":3500.00,"actual_cost":3800.00,"remaining":-300.00}'::jsonb, 'budget');
 select test.eq((select (j #>> '{team,active}')::int from k), 8, 'team active');
+-- ไม่ส่งวันที่ → ใช้วันนี้ตามเขตเวลาโครงการ (ต้องไม่ติดสิทธิ์ app_setting)
+select test.eq((public.get_dashboard() ->> 'today')::date,
+  (now() at time zone 'Asia/Bangkok')::date, 'default today uses project timezone');
 reset role;
 
 -- HEAD ฝ่ายวิชาการ: เฉพาะฝ่ายตน
 select test.login('head@example.ac.th');
-set local role authenticated;
+set local role app_user;
 create temp table kh as select public.get_dashboard('2026-09-23') as j;
 select test.eq((select j ->> 'scope' from kh), 'DEPARTMENT:ฝ่ายวิชาการ', 'head scope');
 select test.eq((select (j #>> '{tasks,total}')::int from kh), 5, 'head task total');
@@ -50,17 +53,17 @@ select test.eq((select count(*) from public.evidence where id = 'E002')::int, 0,
 reset role;
 
 select test.login('secretary@example.ac.th');
-set local role authenticated;
+set local role app_user;
 select test.eq(public.get_dashboard('2026-09-23') #>> '{evidence,done_without_evidence_list,0,id}', 'T005', 'secretary sees T005 missing');
 reset role;
 
 -- MEMBER: ปิด
 select test.login('member@example.ac.th');
-set local role authenticated;
+set local role app_user;
 select test.throws($$select public.get_dashboard()$$, 'member dashboard disabled', '42501');
 reset role;
 select test.login(null);
-set local role authenticated;
+set local role app_user;
 select test.throws($$select public.get_dashboard()$$, 'anonymous dashboard', '42501');
 reset role;
 

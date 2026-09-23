@@ -3,7 +3,7 @@ begin;
 
 -- PRESIDENT: ทั้งโครงการ
 select test.login('president@example.ac.th');
-set local role authenticated;
+set local role app_user;
 select test.eq((select count(*) from public.task)::int, 8, 'president tasks');
 select test.eq((select count(*) from public.budget)::int, 2, 'president budget');
 select test.eq((select count(*) from public.evidence_review)::int, 1, 'president sees review part');
@@ -18,7 +18,7 @@ reset role;
 
 -- HEAD ฝ่ายวิชาการ
 select test.login('head@example.ac.th');
-set local role authenticated;
+set local role app_user;
 select test.eq((select array_agg(id order by id) from public.task), '{T001,T002,T006,T007,T008}'::text[], 'head tasks');
 select test.eq((select array_agg(id order by id) from public.document), '{D001,D002}'::text[], 'head documents');
 select test.eq((select array_agg(id order by id) from public.letter), '{L001}'::text[], 'head letters');
@@ -35,7 +35,7 @@ reset role;
 
 -- MEMBER: เฉพาะงานที่ตนรับผิดชอบหลัก/ร่วม
 select test.login('member@example.ac.th');
-set local role authenticated;
+set local role app_user;
 select test.eq((select array_agg(id order by id) from public.task), '{T002,T006}'::text[], 'member own tasks');
 select test.eq((select count(*) from public.document)::int, 0, 'member no documents');
 select test.eq((select count(*) from public.budget)::int, 0, 'member no budget');
@@ -46,12 +46,12 @@ reset role;
 -- ปิด flag อ่าน → เห็น 0 แถว (fail-closed)
 update public.feature_flag set state = 'DISABLED_FAIL_CLOSED' where key = 'READ:BUDGET';
 select test.login('president@example.ac.th');
-set local role authenticated;
+set local role app_user;
 select test.eq((select count(*) from public.budget)::int, 0, 'read flag off hides rows');
 reset role;
 delete from public.feature_flag where key = 'READ:LETTER';
 select test.login('president@example.ac.th');
-set local role authenticated;
+set local role app_user;
 select test.eq((select count(*) from public.letter)::int, 0, 'missing flag = disabled');
 reset role;
 

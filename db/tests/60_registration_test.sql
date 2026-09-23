@@ -2,18 +2,18 @@
 begin;
 
 create temp table inv (who text primary key, code text, invite_id text);
-grant all on inv to authenticated;
+grant all on inv to app_user;
 create temp table res (step text primary key, j jsonb);
-grant all on res to authenticated;
+grant all on res to app_user;
 
 -- ---- สร้าง invite ----
 select test.login('head@example.ac.th');
-set local role authenticated;
+set local role app_user;
 select test.throws($$select public.create_invite('M008')$$, 'head cannot create invite', '42501');
 reset role;
 
 select test.login('president@example.ac.th');
-set local role authenticated;
+set local role app_user;
 select test.throws($$select public.create_invite('M003')$$, 'member already has account', '23505');
 select test.throws($$select public.create_invite('M006')$$, 'inactive member', '22023');
 select test.throws($$select public.create_invite('M007')$$, 'unmapped position', '22023');
@@ -41,7 +41,7 @@ select test.throws($$insert into public.invite (member_id, code_hash, created_by
 
 -- ---- ล้มเหลว: ข้อความเดียวกันทุกกรณี ----
 select test.login('new1@example.ac.th');
-set local role authenticated;
+set local role app_user;
 insert into res values ('wrong code', public.register_self('6500008', 'AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-0000-1111'));
 insert into res values ('wrong student', public.register_self('6599999', (select code from inv where who = 'm8')));
 insert into res values ('other member invite', public.register_self('6500009', (select code from inv where who = 'm8')));
@@ -50,19 +50,15 @@ insert into res values ('empty', public.register_self('', ''));
 insert into res values ('null', public.register_self(null, null));
 reset role;
 select test.login('member@example.ac.th');
-set local role authenticated;
+set local role app_user;
 insert into res values ('already registered email', public.register_self('6500008', (select code from inv where who = 'm8')));
 reset role;
 select test.login('outsider@gmail.com');
-set local role authenticated;
+set local role app_user;
 insert into res values ('outside domain', public.register_self('6500008', (select code from inv where who = 'm8')));
 reset role;
-select test.login('unverified@example.ac.th');
-set local role authenticated;
-insert into res values ('unverified email', public.register_self('6500008', (select code from inv where who = 'm8')));
-reset role;
 select test.login(null);
-set local role authenticated;
+set local role app_user;
 insert into res values ('no session', public.register_self('6500008', (select code from inv where who = 'm8')));
 reset role;
 
@@ -75,7 +71,7 @@ select test.ok((select count(*) from public.registration_attempt where not succe
 
 -- ---- สำเร็จ: email จาก session, role จากตำแหน่ง ----
 select test.login('new2@example.ac.th');
-set local role authenticated;
+set local role app_user;
 insert into res values ('success', public.register_self(' 6500008 ', lower((select code from inv where who = 'm8'))));
 reset role;
 select test.eq((select j ->> 'ok' from res where step = 'success'), 'true', 'register ok');
@@ -88,49 +84,47 @@ select test.eq((select count(*) from public.audit_log where action = 'SELF_REGIS
 
 -- ใช้ซ้ำ → ปฏิเสธ
 select test.login('new3@example.ac.th');
-set local role authenticated;
+set local role app_user;
 select test.eq(public.register_self('6500008', (select code from inv where who = 'm8')) ->> 'ok', 'false', 'invite single use');
 reset role;
 
 -- ผู้ใช้ใหม่ใช้งานได้ทันที
 select test.login('new2@example.ac.th');
-set local role authenticated;
+set local role app_user;
 select test.eq(private.my_role(), 'MEMBER'::public.app_role, 'new user has role');
 reset role;
 
 -- ---- หมดอายุ ----
 update public.invite set expires_at = now() - interval '1 minute' where invite_id = (select invite_id from inv where who = 'm9');
 select test.login('new3@example.ac.th');
-set local role authenticated;
+set local role app_user;
 select test.eq(public.register_self('6500009', (select code from inv where who = 'm9')) ->> 'ok', 'false', 'expired invite');
 reset role;
 update public.invite set expires_at = now() + interval '1 day' where invite_id = (select invite_id from inv where who = 'm9');
 
 -- ---- rate limit: new1 ล้มเหลวไปแล้ว 6 ครั้ง ----
 select test.login('new1@example.ac.th');
-set local role authenticated;
+set local role app_user;
 select test.eq(public.register_self('6500009', (select code from inv where who = 'm9')) ->> 'ok', 'false', 'rate limited even with correct data');
 reset role;
 
 -- ---- ปิด flag → สมัครไม่ได้ ----
 update public.feature_flag set state = 'DISABLED_FAIL_CLOSED' where key = 'SELF_REGISTRATION';
 select test.login('new4@example.ac.th');
-set local role authenticated;
+set local role app_user;
 select test.eq(public.register_self('6500009', (select code from inv where who = 'm9')) ->> 'ok', 'false', 'flag off');
 reset role;
 update public.feature_flag set state = 'ENABLED_CONTROLLED' where key = 'SELF_REGISTRATION';
 
 select test.login('new4@example.ac.th');
-set local role authenticated;
+set local role app_user;
 select test.eq(public.register_self('6500009', (select code from inv where who = 'm9')) ->> 'ok', 'true', 'm9 registers');
 reset role;
 
 -- ---- รหัสนักศึกษาซ้ำ = ระบุตัวตนไม่ได้ ----
 select test.throws($$insert into public.member (full_name, student_id, department, position, work_status) values ('ซ้ำ', '6500008', 'ฝ่ายสถานที่', 'สมาชิก', 'ปฏิบัติหน้าที่')$$, 'student id unique', '23505');
 
--- anon เรียก RPC ไม่ได้
-set local role anon;
-select test.throws($$select public.register_self('1', '2')$$, 'anon cannot call', '42501');
-reset role;
+-- PUBLIC เรียก RPC ไม่ได้ (เฉพาะ app_user)
+select test.ok(not has_function_privilege('public', 'public.register_self(text, text)', 'execute'), 'public cannot execute');
 
 rollback;

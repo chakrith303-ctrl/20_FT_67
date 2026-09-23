@@ -1,97 +1,129 @@
 # คู่มือติดตั้ง (สำหรับผู้ดูแลโครงการ)
 
-ทุกขั้นตอนใช้บริการแบบฟรีทั้งหมด ใช้เวลาประมาณ 30–45 นาที
+ใช้บริการฟรีทั้งหมด: **Supabase** (ฐานข้อมูล) + **Render** (รันเว็บ) + **Google Cloud** (login) + **GitHub Actions** (ปลุกเว็บ)
+ใช้เวลาประมาณ 45 นาที ทำตามลำดับ A → G
 
-> **ห้ามส่งค่าต่อไปนี้ให้ใคร (รวมถึงในแชท):** รหัสผ่านฐานข้อมูล, `service_role` key, Google Client Secret
-> ค่าที่เปิดเผยได้: Project URL และ `anon` (publishable) key
+> **ห้ามส่งค่าต่อไปนี้ให้ใคร (รวมถึงในแชท):** รหัสผ่านฐานข้อมูล / `DATABASE_URL`, Google Client Secret, `SESSION_SECRET`
+> ใส่ค่าเหล่านี้ในหน้า Environment ของ Render เท่านั้น
 
 ---
 
-## ขั้นที่ A — สร้างโปรเจกต์ Supabase
+## A — ฐานข้อมูล (Supabase)
 
-1. ไปที่ https://supabase.com → **Start your project** → สมัครด้วยบัญชี GitHub หรืออีเมล
+1. https://supabase.com → **Start your project** → สมัคร (ใช้บัญชี GitHub ได้)
 2. **New project**
-   - Name: เช่น `project-ft67`
-   - Database Password: กด **Generate** แล้ว **เก็บไว้ในที่ปลอดภัย**
-   - Region: **Southeast Asia (Singapore)**
-   - Plan: **Free**
-3. รอประมาณ 2 นาทีให้โปรเจกต์พร้อม
+   - Name: `project-ft67`
+   - Database Password: กด **Generate** → **คัดลอกเก็บไว้** (ใช้ในข้อ 4)
+   - Region: **Southeast Asia (Singapore)** · Plan: **Free**
+3. รอประมาณ 2 นาที
+4. กดปุ่ม **Connect** (ด้านบน) → เลือก **Session pooler** → คัดลอก URI
+   หน้าตาประมาณ `postgresql://postgres.xxxx:[YOUR-PASSWORD]@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres`
+   แทน `[YOUR-PASSWORD]` ด้วยรหัสผ่านจากข้อ 2 → นี่คือค่า **`DATABASE_URL`**
+   (ต้องใช้ *Session pooler* เพราะ Render ต่อแบบ Direct connection ไม่ได้)
+5. ปิดช่องทาง Data API ของ Supabase (ระบบนี้เข้าถึงข้อมูลผ่านเว็บของเราเท่านั้น):
+   **Project Settings → Data API** → ปิด **Enable Data API** (ถ้ามีตัวเลือกนี้)
+   — ไม่ปิดก็ไม่เป็นไร เพราะฐานข้อมูลถูกตั้งไม่ให้ Data API อ่าน/เขียนอะไรได้อยู่แล้ว
 
-## ขั้นที่ B — สร้างตารางและระบบสิทธิ์
+ไม่ต้องสร้างตารางเอง — เว็บจะสร้างให้อัตโนมัติตอนเริ่มทำงานครั้งแรก (ขั้น C)
 
-1. เมนูซ้าย **SQL Editor** → **New query**
-2. เปิดไฟล์ในโฟลเดอร์ `supabase/migrations/` **ทีละไฟล์ตามลำดับ** คัดลอกทั้งไฟล์มาวาง แล้วกด **Run**
-   1. `20260923000001_schema.sql`
-   2. `20260923000002_security.sql`
-   3. `20260923000003_functions.sql`
+## B — Google Login (Google Cloud Console)
 
-   แต่ละไฟล์ต้องขึ้น `Success. No rows returned` ถ้าขึ้น error ให้หยุดแล้วส่งข้อความ error มา
-3. ตั้งโดเมนอีเมลขององค์กร (ผู้ที่ไม่ได้ใช้โดเมนนี้จะสมัครไม่ได้) — New query แล้วรัน:
-   ```sql
-   update public.app_setting set value = 'โดเมนของคุณ เช่น kmutt.ac.th' where key = 'allowed_email_domains';
-   ```
-4. ตรวจรายการสถานะที่ระบบยอมรับ (ต้องตรงกับที่ใช้ในชีทจริงทุกตัวอักษร):
-   ```sql
-   select entity, value from public.status_option order by entity, sort_order;
-   ```
-   ถ้าชีทจริงมีสถานะอื่น (เช่น "รอดำเนินการ") ให้แจ้งมา หรือเพิ่มเอง:
-   ```sql
-   insert into public.status_option (entity, value, sort_order) values ('TASK', 'รอดำเนินการ', 5);
-   ```
-
-## ขั้นที่ C — ปิดการสมัครด้วยอีเมล/รหัสผ่าน
-
-ระบบนี้ให้ login ด้วย Google เท่านั้น
-
-1. **Authentication → Sign In / Providers**
-2. **Email**: ปิด (Disable)
-3. **Authentication → Settings** (หรือ Sign In / Providers → User Signups): ตรวจว่า **Allow new users to sign up** ยังเปิดอยู่
-   (ต้องเปิด เพื่อให้คนที่ login ด้วย Google ครั้งแรกมีตัวตน — แต่เขาจะยัง **ไม่มีสิทธิ์ใด ๆ** จนกว่าจะสมัครด้วย invite)
-
-## ขั้นที่ D — Google Login (Google Cloud Console)
-
-1. ไปที่ https://console.cloud.google.com → ด้านบนเลือก **Select a project → New Project** → ตั้งชื่อ → Create
-2. เมนู **APIs & Services → OAuth consent screen** (หรือ **Google Auth Platform → Branding**)
-   - App name: ชื่อโครงการ, User support email: อีเมลของคุณ
-   - Audience / User type:
-     - ถ้าอีเมลองค์กรเป็น Google Workspace ให้เลือก **Internal** (คนนอกองค์กร login ไม่ได้เลย)
-     - ถ้าเลือก Internal ไม่ได้ ให้เลือก **External** แล้วกด **Publish app** (ระบบจะกันคนนอกโดเมนด้วยค่า `allowed_email_domains` อยู่แล้ว)
-   - Scopes: ใช้ค่าเริ่มต้น (`email`, `profile`, `openid`) ไม่ต้องเพิ่ม
-3. เมนู **Clients** (หรือ **Credentials → Create credentials → OAuth client ID**)
+1. https://console.cloud.google.com → ด้านบน **Select a project → New project** → ตั้งชื่อ → Create
+2. เมนู **APIs & Services → OAuth consent screen** (บางบัญชีชื่อ **Google Auth Platform**) → Get started
+   - App name: ชื่อโครงการ · User support email: อีเมลของคุณ
+   - Audience:
+     - ถ้าอีเมลองค์กรเป็น Google Workspace → เลือก **Internal** (คนนอกองค์กร login ไม่ได้เลย)
+     - ถ้าเลือก Internal ไม่ได้ → เลือก **External** แล้วกด **Publish app**
+       (ระบบกันคนนอกโดเมนอีกชั้นด้วยค่า `allowed_email_domains` ในขั้น D)
+3. เมนู **Clients → Create client**
    - Application type: **Web application**
-   - Authorized redirect URIs: ใส่
-     `https://<project-ref>.supabase.co/auth/v1/callback`
-     (ค่า `<project-ref>` ดูได้จาก Supabase → **Project Settings → General → Project ID**)
+   - Authorized redirect URIs: ใส่ชั่วคราว `https://project-ft67.onrender.com/auth/google/callback`
+     (ถ้า Render ให้ชื่อเว็บต่างจากนี้ ค่อยกลับมาแก้หลังขั้น C)
    - Create → คัดลอก **Client ID** และ **Client Secret**
-4. กลับไป Supabase → **Authentication → Sign In / Providers → Google** → เปิดใช้ → วาง Client ID / Client Secret → Save
 
-## ขั้นที่ E — ส่งข้อมูลให้ผู้พัฒนา (สำหรับขั้นย้ายข้อมูล)
+## C — รันเว็บ (Render)
 
-ส่งมาเฉพาะ **แถวหัวคอลัมน์** และตัวอย่าง 2–3 แถว **ที่ลบข้อมูลส่วนตัวแล้ว** (เปลี่ยนชื่อ/รหัสนักศึกษาเป็นค่าสมมติ) ของชีท:
-TASK_MASTER, DOCUMENT, LETTER_TRACKER, REGISTRATION, BUDGET, RISK_ISSUE, EVIDENCE, MEMBER, EVALUATION_QUESTION, EVALUATION_RESPONSE
+1. https://render.com → สมัครด้วยบัญชี GitHub → อนุญาตให้เข้าถึง repo `20_FT_67`
+2. **New → Blueprint** → เลือก repo `20_FT_67` → Render อ่านไฟล์ `render.yaml` ให้เอง
+3. กรอกค่าที่ Render ถาม:
 
-และตอบคำถาม:
-1. คอลัมน์ "ผู้รับผิดชอบหลัก/ร่วม" ใน TASK_MASTER ใส่เป็น **รหัสสมาชิก** (M003) หรือ **ชื่อคน**
-2. "เหลือเวลา" เป็นสูตรที่คำนวณจากคอลัมน์วันครบกำหนดหรือไม่ — คอลัมน์นั้นชื่ออะไร
-3. MEMBER มีรหัสนักศึกษาของทุกคนหรือยัง
-4. รายชื่อฝ่ายทั้งหมด
+   | ค่า | ใส่อะไร |
+   |---|---|
+   | `DATABASE_URL` | URI จากขั้น A ข้อ 4 |
+   | `GOOGLE_CLIENT_ID` | จากขั้น B ข้อ 3 |
+   | `GOOGLE_CLIENT_SECRET` | จากขั้น B ข้อ 3 |
+   | `GOOGLE_REDIRECT_URI` | `https://<ชื่อเว็บ>.onrender.com/auth/google/callback` |
+   | `GOOGLE_HOSTED_DOMAIN` | โดเมนอีเมลองค์กร เช่น `example.ac.th` (ไม่บังคับ) |
 
-## ขั้นที่ F — ผู้ดูแลระบบคนแรก (ทำหลังหน้าเว็บพร้อม)
-
-1. เข้าเว็บแล้ว login ด้วย Google 1 ครั้ง (จะขึ้นว่ายังไม่มีบัญชี — ถูกต้องแล้ว)
-2. Supabase → SQL Editor รัน (เปลี่ยนเป็นอีเมลและรหัสสมาชิกของคุณ):
-   ```sql
-   select private.bootstrap_admin('you@โดเมน', 'M001');
+   `SESSION_SECRET` Render สุ่มให้เอง · `NODE_ENV` ตั้งไว้แล้ว
+4. **Apply** → รอ build ประมาณ 3–5 นาที → ใน **Logs** ต้องเห็น
    ```
-3. รีเฟรชหน้าเว็บ → จะเข้าได้ในฐานะ ADMIN แล้วสร้าง invite ให้สมาชิกคนอื่นต่อได้
+   migrate: 001_schema.sql
+   migrate: 002_security.sql
+   migrate: 003_functions.sql
+   Server running on port ...
+   ```
+5. เปิด `https://<ชื่อเว็บ>.onrender.com/health` ต้องได้ `{"status":"ok",...}`
+6. ถ้าชื่อเว็บไม่ใช่ `project-ft67` → กลับไปแก้ redirect URI ในขั้น B ข้อ 3 และ `GOOGLE_REDIRECT_URI` ใน Render ให้ตรงกัน
+
+## D — ตั้งค่าเริ่มต้นในฐานข้อมูล (Supabase → SQL Editor → New query)
+
+```sql
+-- 1) โดเมนอีเมลที่สมัครได้ (คั่นหลายโดเมนด้วย ,) — ว่าง = ไม่มีใครสมัครได้
+update public.app_setting set value = 'example.ac.th' where key = 'allowed_email_domains';
+
+-- 2) รายชื่อฝ่าย
+insert into public.department (name) values ('ฝ่ายบริหาร'), ('ฝ่ายวิชาการ'), ('ฝ่ายสถานที่');
+
+-- 3) สมาชิกอย่างน้อยตัวคุณเอง (ที่เหลือจะนำเข้าจาก Sheets ในขั้นถัดไป)
+insert into public.member (id, full_name, student_id, department, position, work_status)
+values ('M001', 'ชื่อ นามสกุล', 'รหัสนักศึกษา', 'ฝ่ายบริหาร', 'ประธานโครงการ', 'ปฏิบัติหน้าที่');
+```
+
+ตรวจรายการสถานะที่ระบบยอมรับ (ต้องตรงกับที่ใช้จริงทุกตัวอักษร):
+```sql
+select entity, value from public.status_option order by entity, sort_order;
+```
+
+## E — ผู้ดูแลระบบคนแรก
+
+1. SQL Editor รัน (ใช้อีเมล Google ของคุณ และรหัสสมาชิกจากขั้น D):
+   ```sql
+   select private.bootstrap_admin('you@example.ac.th', 'M001');
+   ```
+2. เปิดเว็บ → **เข้าสู่ระบบด้วย Google** ด้วยอีเมลนั้น → ระบบผูกบัญชีให้อัตโนมัติ → เห็นเมนู Dashboard / Invite
+3. สมาชิกคนอื่น: เมนู **Invite** → ใส่รหัสสมาชิก → ส่ง code ให้เจ้าตัวทางช่องทางส่วนตัว
+   → เจ้าตัวเข้าเว็บ login ด้วย Google → กรอกรหัสนักศึกษา + code
+
+## F — ปลุกเว็บอัตโนมัติ (GitHub Actions)
+
+Render ฟรีจะหลับเมื่อไม่มีคนใช้ประมาณ 15 นาที และ Supabase ฟรีจะพักโปรเจกต์ถ้าไม่มีการใช้งานประมาณ 7 วัน
+
+1. GitHub → repo `20_FT_67` → **Settings → Secrets and variables → Actions → Variables → New repository variable**
+2. Name: `APP_URL` · Value: `https://<ชื่อเว็บ>.onrender.com` → Add
+3. แท็บ **Actions → keepalive → Run workflow** เพื่อทดสอบ (ต้องขึ้นเครื่องหมายถูกสีเขียว)
+
+หมายเหตุ: GitHub จะหยุด workflow ตามเวลาอัตโนมัติถ้า repo ไม่มีการเคลื่อนไหว 60 วัน — ถ้าได้อีเมลแจ้ง ให้กด Enable อีกครั้ง
+
+## G — ส่งข้อมูลให้ผู้พัฒนา (สำหรับขั้นย้ายข้อมูลจาก Sheets)
+
+ส่งเฉพาะ **แถวหัวคอลัมน์** + ตัวอย่าง 2–3 แถว **ที่เปลี่ยนชื่อ/รหัสนักศึกษาเป็นค่าสมมติแล้ว** ของทุกชีท และตอบ:
+1. "ผู้รับผิดชอบหลัก/ร่วม" ใน TASK_MASTER ใส่เป็นรหัสสมาชิก (M003) หรือชื่อคน
+2. "เหลือเวลา" คำนวณจากคอลัมน์วันครบกำหนดใช่ไหม — คอลัมน์นั้นชื่ออะไร
+3. MEMBER มีรหัสนักศึกษาครบทุกคนหรือยัง
+4. ค่าสถานะที่ใช้จริงในแต่ละชีท
 
 ---
 
-## การเปลี่ยน Feature Flag (ต้องผ่านการอนุมัติ)
+## เรื่องอื่น ๆ
 
-แก้ได้เฉพาะใน SQL Editor เท่านั้น (API แก้ไม่ได้) และทุกการเปลี่ยนถูกบันทึกใน `audit_log` อัตโนมัติ:
+**เปลี่ยน Feature Flag** (ต้องผ่านการอนุมัติ) — SQL Editor เท่านั้น ทุกการเปลี่ยนเข้า `audit_log` อัตโนมัติ:
 ```sql
 update public.feature_flag set state = 'ENABLED', note = 'อนุมัติโดย ... วันที่ ...' where key = 'WRITE:LETTER';
 ```
-หมายเหตุ: ปัจจุบันเปิดเขียนได้เฉพาะ TASK/DOCUMENT ในระดับสิทธิ์ของฐานข้อมูลด้วย — การเปิดโมดูลอื่นต้องเพิ่ม policy
-และสิทธิ์คอลัมน์ผ่าน migration ใหม่ด้วย (แค่เปลี่ยน flag ยังเขียนไม่ได้ ซึ่งเป็นการ fail-closed โดยตั้งใจ)
+การเปิดเขียนโมดูลอื่นนอกจาก TASK/DOCUMENT ต้องเพิ่มสิทธิ์ใน migration ใหม่ด้วย (เปลี่ยนแค่ flag ยังเขียนไม่ได้ — ตั้งใจให้ fail-closed)
+
+**อัปเดตโค้ด:** push ขึ้น GitHub (หรืออัปโหลดไฟล์ผ่านหน้าเว็บ GitHub) → Render deploy ใหม่ให้อัตโนมัติ
+และรัน migration ใหม่ที่เพิ่มเข้ามาเอง
+
+**ย้ายไป Railway ในอนาคต:** สร้าง service จาก repo เดียวกัน ใส่ env ชุดเดิม เปลี่ยนแค่ `DATABASE_URL`

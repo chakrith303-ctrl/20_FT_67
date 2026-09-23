@@ -13,7 +13,7 @@ select test.throws($$insert into public.position_role values ('ผู้ดู�
 
 -- ไม่ login
 select test.login(null);
-set local role authenticated;
+set local role app_user;
 select test.eq(private.my_role(), null, 'anonymous has no role');
 select test.eq(public.get_my_profile(), null, 'anonymous profile null');
 select test.eq((select count(*) from public.task)::int, 0, 'anonymous sees no task');
@@ -21,7 +21,7 @@ reset role;
 
 -- บทบาทจากตำแหน่ง
 select test.login('head@example.ac.th');
-set local role authenticated;
+set local role app_user;
 select test.eq(private.my_role(), 'HEAD'::public.app_role, 'head role');
 select test.eq(private.my_scope(), 'DEPARTMENT', 'head scope');
 select test.eq(public.get_my_profile() ->> 'department', 'ฝ่ายวิชาการ', 'head department');
@@ -30,18 +30,18 @@ select test.ok(not (public.get_my_profile() -> 'readable_modules') ? 'EVALUATION
 reset role;
 
 select test.login('secretary@example.ac.th');
-set local role authenticated;
+set local role app_user;
 select test.eq(private.my_scope(), 'DEPARTMENT', 'secretary = head scope');
 reset role;
 
 select test.login('vp@example.ac.th');
-set local role authenticated;
+set local role app_user;
 select test.eq(private.my_role(), 'ADMIN'::public.app_role, 'ADMIN from user_account');
 select test.eq(private.my_scope(), 'PROJECT', 'admin scope');
 reset role;
 
 select test.login('member@example.ac.th');
-set local role authenticated;
+set local role app_user;
 select test.eq(public.get_my_profile() -> 'writable_modules', '[]'::jsonb, 'member cannot write');
 select test.eq(public.get_my_profile() -> 'readable_modules', '["TASK"]'::jsonb, 'member reads task only');
 select test.eq((public.get_my_profile() ->> 'can_view_dashboard')::boolean, false, 'member dashboard disabled');
@@ -50,24 +50,24 @@ reset role;
 -- เปลี่ยนตำแหน่งแล้วสิทธิ์เปลี่ยนทันที
 update public.member set position = 'หัวหน้า' where id = 'M005';
 select test.login('member@example.ac.th');
-set local role authenticated;
+set local role app_user;
 select test.eq(private.my_role(), 'HEAD'::public.app_role, 'role follows MEMBER position');
 reset role;
 
 -- ตำแหน่งไม่ตรง / พ้นสภาพ / ระงับบัญชี → ไม่มีสิทธิ์
 update public.member set position = 'หัวหน้าฝ่าย' where id = 'M005';
 select test.login('member@example.ac.th');
-set local role authenticated;
+set local role app_user;
 select test.eq(private.my_role(), null, 'unmapped position has no role');
 reset role;
 update public.member set position = 'สมาชิก', work_status = 'พ้นสภาพ' where id = 'M005';
 select test.login('member@example.ac.th');
-set local role authenticated;
+set local role app_user;
 select test.eq(private.my_role(), null, 'inactive member has no role');
 reset role;
 update public.user_account set account_status = 'SUSPENDED' where user_id = 'U002';
 select test.login('head@example.ac.th');
-set local role authenticated;
+set local role app_user;
 select test.eq(private.my_role(), null, 'suspended account has no role');
 select test.eq((select count(*) from public.task)::int, 0, 'suspended sees nothing');
 reset role;

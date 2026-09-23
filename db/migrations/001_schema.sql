@@ -4,6 +4,16 @@
 
 create schema if not exists private;
 
+-- บทบาทฐานข้อมูลที่ทุกคำขอจากเว็บใช้ (server ตั้ง `set local role app_user` ทุก transaction)
+do $$
+begin
+  if not exists (select 1 from pg_roles where rolname = 'app_user') then
+    create role app_user nologin;
+  end if;
+end
+$$;
+grant app_user to current_user;
+
 create type public.app_role as enum ('ADMIN', 'PRESIDENT', 'VICE_PRESIDENT', 'HEAD', 'SECRETARY', 'MEMBER');
 create type public.flag_state as enum ('ENABLED', 'ENABLED_READ_ONLY', 'ENABLED_CONTROLLED', 'DISABLED_FAIL_CLOSED');
 
@@ -188,7 +198,7 @@ create table public.member (
 create table public.user_account (
   user_id text primary key default private.next_id('U') check (user_id ~ '^U[0-9]{3,}$'),
   member_id text not null unique references public.member (id) on update cascade,
-  auth_user_id uuid unique references auth.users (id) on delete set null,
+  google_sub text unique, -- รหัสบัญชี Google (sub) ที่ยืนยันแล้วโดย server
   email text not null unique check (email = lower(btrim(email))),
   role public.app_role not null,
   account_status text not null default 'ACTIVE' check (account_status in ('ACTIVE', 'SUSPENDED')),
@@ -341,9 +351,9 @@ create unique index invite_one_active_per_member on public.invite (member_id) wh
 
 create table public.registration_attempt (
   id bigint generated always as identity primary key,
-  auth_user_id uuid,
+  google_sub text,
   attempted_at timestamptz not null default now(),
   success boolean not null,
   reason text -- เหตุผลจริง (ดูได้เฉพาะผู้ดูแลฐานข้อมูล ไม่ส่งกลับให้ผู้ใช้)
 );
-create index registration_attempt_user_idx on public.registration_attempt (auth_user_id, attempted_at desc);
+create index registration_attempt_user_idx on public.registration_attempt (google_sub, attempted_at desc);

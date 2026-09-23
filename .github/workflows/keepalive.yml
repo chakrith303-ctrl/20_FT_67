@@ -1,0 +1,17 @@
+# ปลุกเว็บทุก 10 นาที: กัน Render (ฟรี) หลับ และกัน Supabase (ฟรี) พักโปรเจกต์
+# ตั้งค่า: GitHub repo → Settings → Secrets and variables → Actions → Variables → New: APP_URL
+#         เช่น https://project-ft67.onrender.com
+name: keepalive
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-24.04
+    if: ${{ vars.APP_URL != '' }}
+    steps:
+      - name: Call /health
+        run: curl -fsS --max-time 90 --retry 2 "${{ vars.APP_URL }}/health"

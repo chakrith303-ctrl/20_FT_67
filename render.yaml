@@ -1,0 +1,25 @@
+# Render Blueprint — กด New → Blueprint แล้วเลือก repo นี้ Render จะสร้าง service ตามไฟล์นี้
+services:
+  - type: web
+    name: project-ft67
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: GOOGLE_HOSTED_DOMAIN
+        sync: false

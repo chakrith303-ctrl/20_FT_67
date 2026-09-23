@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ระบบบริหารโครงการ</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+<header>
+  <strong>ระบบบริหารโครงการ</strong>
+  <span id="who" class="muted">กำลังโหลด…</span>
+  <span>
+    <a id="btnLogin" class="button hidden" href="/auth/google/start">เข้าสู่ระบบด้วย Google</a>
+    <button id="btnLogout" class="secondary hidden" type="button">ออกจากระบบ</button>
+  </span>
+</header>
+
+<nav id="tabs" class="hidden">
+  <button type="button" data-tab="dashboard" class="hidden">Dashboard</button>
+  <button type="button" data-tab="modules">ข้อมูล</button>
+  <button type="button" data-tab="writer" class="hidden">บันทึกงาน/เอกสาร</button>
+  <button type="button" data-tab="invite" class="hidden">Invite</button>
+</nav>
+
+<main>
+  <section id="welcome" class="card hidden">
+    <h2>ยินดีต้อนรับ</h2>
+    <p>กรุณาเข้าสู่ระบบด้วยบัญชี Google ขององค์กร</p>
+  </section>
+
+  <!-- สมัครสมาชิก -->
+  <section id="register" class="card hidden">
+    <h2>สมัครสมาชิก</h2>
+    <p class="muted">ใช้อีเมล <b id="regEmail"></b> ที่เข้าสู่ระบบอยู่ · บทบาทถูกกำหนดจากทะเบียนสมาชิกโดยอัตโนมัติ</p>
+    <form id="formRegister">
+      <label for="studentId">รหัสนักศึกษา</label>
+      <input id="studentId" name="student_id" autocomplete="off" required>
+      <label for="inviteCode">Invite code</label>
+      <input id="inviteCode" name="invite_code" autocomplete="off" placeholder="XXXX-XXXX-…" required>
+      <button type="submit">สมัคร</button>
+    </form>
+    <div id="regMsg" class="msg"></div>
+  </section>
+
+  <!-- Dashboard -->
+  <section id="dashboard" class="card hidden tab">
+    <h2>Dashboard <small class="muted" id="dashScope"></small></h2>
+    <div id="kpis" class="grid"></div>
+    <h3>งานเกินกำหนด</h3><div class="scroll" id="overdue"></div>
+    <h3>งานใกล้ครบกำหนด (0–3 วัน)</h3><div class="scroll" id="dueSoon"></div>
+    <h3>เอกสารที่ต้องติดตาม</h3><div class="scroll" id="docTracking"></div>
+    <h3>งานเสร็จแล้วแต่ไม่มีหลักฐาน</h3><div class="scroll" id="noEvidence"></div>
+  </section>
+
+  <!-- ข้อมูลโมดูล -->
+  <section id="modules" class="card hidden tab">
+    <h2>ข้อมูล</h2>
+    <div class="row">
+      <select id="moduleSel" aria-label="โมดูล"></select>
+      <button id="btnLoadModule" type="button">แสดง</button>
+    </div>
+    <div id="moduleMsg" class="msg"></div>
+    <div class="scroll" id="moduleTable"></div>
+  </section>
+
+  <!-- บันทึกงาน / เอกสาร -->
+  <section id="writer" class="card hidden tab">
+    <h2>บันทึกงาน / เอกสาร</h2>
+    <div class="row">
+      <label><input type="radio" name="kind" value="tasks" checked> งาน (TASK)</label>
+      <label><input type="radio" name="kind" value="documents"> เอกสาร (DOCUMENT)</label>
+    </div>
+    <form id="formWrite">
+      <label for="wId">รหัส (เว้นว่าง = สร้างใหม่ · ใส่รหัส = แก้ไขเฉพาะช่องที่กรอก)</label>
+      <input id="wId" placeholder="เช่น T001 / D001">
+      <div id="writeFields"></div>
+      <button type="submit">บันทึก</button>
+    </form>
+    <div id="writeMsg" class="msg"></div>
+  </section>
+
+  <!-- Invite -->
+  <section id="invite" class="card hidden tab">
+    <h2>สร้าง Invite</h2>
+    <form id="formInvite" class="row">
+      <input id="inviteMember" placeholder="รหัสสมาชิก เช่น M012" required>
+      <button type="submit">สร้าง</button>
+    </form>
+    <div id="inviteMsg" class="msg"></div>
+    <h3>Invite ล่าสุด</h3>
+    <div class="scroll" id="inviteList"></div>
+  </section>
+</main>
+</body>
+</html>

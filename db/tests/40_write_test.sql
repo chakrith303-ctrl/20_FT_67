@@ -2,7 +2,7 @@
 begin;
 
 select test.login('president@example.ac.th');
-set local role authenticated;
+set local role app_user;
 
 -- โมดูลที่ DISABLED_FAIL_CLOSED เขียนไม่ได้เลย
 select test.throws($$insert into public.letter (department, subject) values ('ฝ่ายวิชาการ', 'x')$$, 'letter write blocked', '42501');
@@ -42,7 +42,7 @@ reset role;
 
 -- HEAD: เฉพาะฝ่ายตน
 select test.login('head@example.ac.th');
-set local role authenticated;
+set local role app_user;
 select test.throws($$insert into public.task (department, name) values ('ฝ่ายสถานที่', 'x')$$, 'head other dept insert', '42501');
 select test.eq(test.affected($$update public.task set status = 'เสร็จสิ้น' where id = 'T004'$$), 0, 'head cannot update other dept');
 select test.throws($$update public.task set department = 'ฝ่ายสถานที่' where id = 'T001'$$, 'head cannot move task out', '42501');
@@ -53,7 +53,7 @@ select test.eq((select status from public.task where id = 'T004'), 'กำลั
 
 -- MEMBER: เขียนไม่ได้
 select test.login('member@example.ac.th');
-set local role authenticated;
+set local role app_user;
 select test.throws($$insert into public.task (department, name) values ('ฝ่ายวิชาการ', 'x')$$, 'member insert', '42501');
 select test.eq(test.affected($$update public.task set status = 'ยกเลิก' where id = 'T002'$$), 0, 'member update');
 reset role;
@@ -61,7 +61,7 @@ reset role;
 -- ปิด flag WRITE:TASK → เขียนไม่ได้ทันที
 update public.feature_flag set state = 'DISABLED_FAIL_CLOSED' where key = 'WRITE:TASK';
 select test.login('president@example.ac.th');
-set local role authenticated;
+set local role app_user;
 select test.throws($$insert into public.task (department) values ('ฝ่ายวิชาการ')$$, 'write flag off', '42501');
 select test.eq(test.affected($$update public.task set name = 'x' where id = 'T001'$$), 0, 'update with flag off');
 reset role;

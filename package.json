@@ -1,0 +1,21 @@
+{
+  "name": "project-ft67",
+  "version": "1.0.0",
+  "description": "ระบบบริหารโครงการ (งาน/เอกสาร/Dashboard/สมัครสมาชิกด้วย invite) — Express + PostgreSQL",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "migrate": "node migrate.js",
+    "test": "./scripts/test-db.sh"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "cookie-session": "^2.1.1",
+    "dotenv": "^18.0.3",
+    "express": "^4.22.3",
+    "google-auth-library": "^11.1.0",
+    "pg": "^8.23.0"
+  }
+}

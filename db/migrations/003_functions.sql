@@ -39,15 +39,27 @@ as $$
   left join private.current_ctx() c on true
 $$;
 
--- บันทึกเวลาเข้าสู่ระบบล่าสุด (เรียกหลัง login)
-create function public.touch_login()
+-- เรียกทุกครั้งหลัง login สำเร็จ:
+--   * ผูกบัญชีที่ผู้ดูแลสร้างไว้ล่วงหน้าด้วยอีเมล (google_sub ยังว่าง) กับบัญชี Google นี้
+--   * บันทึกเวลาเข้าสู่ระบบล่าสุด
+create function public.session_login()
 returns void
-language sql volatile security definer
+language plpgsql volatile security definer
 set search_path = ''
 as $$
+begin
+  if private.session_sub() is null or private.session_email() is null then
+    return;
+  end if;
+  update public.user_account
+     set google_sub = private.session_sub()
+   where google_sub is null
+     and email = private.session_email()
+     and not exists (select 1 from public.user_account where google_sub = private.session_sub());
   update public.user_account
      set last_login = now()
-   where user_id = private.my_user_id()
+   where google_sub = private.session_sub();
+end
 $$;
 
 -- ---------------------------------------------------------------------
@@ -69,7 +81,18 @@ as $$
     then exists (select 1 from public.evidence e where e.task_id = p_task_id)
   end
 $$;
-grant execute on function private.task_has_evidence(text, text) to authenticated;
+grant execute on function private.task_has_evidence(text, text) to app_user;
+
+-- วันที่ปัจจุบันตามเขตเวลาของโครงการ (app_setting อ่านตรงจากเว็บไม่ได้ จึงผ่านฟังก์ชันนี้)
+create function private.project_today()
+returns date
+language sql stable security definer
+set search_path = ''
+as $$
+  select (now() at time zone coalesce(
+    (select value from public.app_setting where key = 'timezone'), 'Asia/Bangkok'))::date
+$$;
+grant execute on function private.project_today() to app_user;
 
 create function public.get_dashboard(p_today date default null)
 returns jsonb
@@ -79,10 +102,7 @@ as $$
 declare
   v_role public.app_role := private.my_role();
   v_scope text := private.my_scope();
-  v_today date := coalesce(
-    p_today,
-    (now() at time zone coalesce((select value from public.app_setting where key = 'timezone'), 'Asia/Bangkok'))::date
-  );
+  v_today date := coalesce(p_today, private.project_today());
   v_result jsonb;
 begin
   if v_role is null
@@ -294,7 +314,7 @@ $$;
 
 -- ---------------------------------------------------------------------
 -- 4) Self-registration — Contract V1.1 (ENABLED_CONTROLLED)
---   * อีเมลจาก auth.users ของ session (ไคลเอนต์กำหนดไม่ได้)
+--   * อีเมลจาก session ที่ server ตรวจกับ Google แล้ว (ไคลเอนต์กำหนดไม่ได้)
 --   * จับคู่ด้วย รหัสนักศึกษา + invite code
 --   * บทบาทจากตำแหน่งใน MEMBER
 --   * ตรวจซ้ำทั้งหมดใต้ lock ก่อนบันทึก
@@ -307,9 +327,8 @@ set search_path = ''
 as $$
 declare
   c_generic constant text := 'ไม่สามารถลงทะเบียนได้ กรุณาตรวจสอบข้อมูลอีกครั้งหรือติดต่อผู้ดูแลระบบ';
-  v_uid uuid := auth.uid();
-  v_email text;
-  v_confirmed timestamptz;
+  v_sub text := private.session_sub();
+  v_email text := private.session_email();
   v_domains text[];
   v_max int := coalesce((select value::int from public.app_setting where key = 'register_max_attempts'), 5);
   v_window int := coalesce((select value::int from public.app_setting where key = 'register_window_minutes'), 15);
@@ -322,7 +341,7 @@ declare
   v_user_id text;
   v_reason text;
 begin
-  if v_uid is null then
+  if v_sub is null then
     return jsonb_build_object('ok', false, 'message', c_generic);
   end if;
 
@@ -336,15 +355,13 @@ begin
     end if;
 
     if (select count(*) from public.registration_attempt
-         where auth_user_id = v_uid and not success
+         where google_sub = v_sub and not success
            and attempted_at > now() - make_interval(mins => v_window)) >= v_max then
       v_reason := 'rate limited'; exit checks;
     end if;
 
-    select lower(btrim(email)), email_confirmed_at into v_email, v_confirmed
-      from auth.users where id = v_uid;
-    if v_email is null or v_email = '' or v_confirmed is null then
-      v_reason := 'no verified session email'; exit checks;
+    if v_email is null then
+      v_reason := 'no session email'; exit checks;
     end if;
 
     select array_agg(lower(btrim(d))) into v_domains
@@ -358,7 +375,7 @@ begin
       v_reason := 'malformed input'; exit checks;
     end if;
 
-    if exists (select 1 from public.user_account where email = v_email or auth_user_id = v_uid) then
+    if exists (select 1 from public.user_account where email = v_email or google_sub = v_sub) then
       v_reason := 'account already exists'; exit checks;
     end if;
 
@@ -396,21 +413,21 @@ begin
   end checks;
 
   if v_reason is not null then
-    insert into public.registration_attempt (auth_user_id, success, reason) values (v_uid, false, v_reason);
-    raise log 'register_self rejected: % (uid=%)', v_reason, v_uid;
+    insert into public.registration_attempt (google_sub, success, reason) values (v_sub, false, v_reason);
+    raise log 'register_self rejected: % (sub=%)', v_reason, v_sub;
     return jsonb_build_object('ok', false, 'message', c_generic);
   end if;
 
   -- ---- บันทึกจริง ----
-  insert into public.user_account (member_id, auth_user_id, email, role, account_status)
-  values (v_member.id, v_uid, v_email, v_role, 'ACTIVE')
+  insert into public.user_account (member_id, google_sub, email, role, account_status)
+  values (v_member.id, v_sub, v_email, v_role, 'ACTIVE')
   returning user_id into v_user_id;
 
   update public.invite
      set status = 'USED', used_date = now(), used_by_user_id = v_user_id
    where invite_id = v_invite.invite_id;
 
-  insert into public.registration_attempt (auth_user_id, success, reason) values (v_uid, true, null);
+  insert into public.registration_attempt (google_sub, success, reason) values (v_sub, true, null);
 
   perform private.write_audit(
     'SELF_REGISTER', 'user_account', v_user_id, null,
@@ -424,8 +441,8 @@ end
 $$;
 
 -- ---------------------------------------------------------------------
--- ผู้ดูแลระบบคนแรก — รันใน SQL Editor เท่านั้น (ไม่เปิดผ่าน API)
--- ผู้ใช้ต้อง login ด้วย Google บนเว็บอย่างน้อย 1 ครั้งก่อน
+-- ผู้ดูแลระบบคนแรก — รันใน SQL Editor เท่านั้น (ไม่เปิดให้เว็บเรียก)
+-- บัญชีจะผูกกับ Google อัตโนมัติเมื่อเจ้าของอีเมลนี้ login ครั้งแรก
 -- ---------------------------------------------------------------------
 create function private.bootstrap_admin(p_email text, p_member_id text)
 returns text
@@ -433,15 +450,10 @@ language plpgsql volatile security definer
 set search_path = ''
 as $$
 declare
-  v_uid uuid;
   v_user_id text;
 begin
-  select id into v_uid from auth.users where lower(email) = lower(btrim(p_email));
-  if v_uid is null then
-    raise exception 'ยังไม่พบผู้ใช้ % ใน auth.users — ให้ login บนเว็บก่อน 1 ครั้ง', p_email;
-  end if;
-  insert into public.user_account (member_id, auth_user_id, email, role, account_status)
-  values (p_member_id, v_uid, lower(btrim(p_email)), 'ADMIN', 'ACTIVE')
+  insert into public.user_account (member_id, google_sub, email, role, account_status)
+  values (p_member_id, null, lower(btrim(p_email)), 'ADMIN', 'ACTIVE')
   returning user_id into v_user_id;
   perform private.write_audit('BOOTSTRAP_ADMIN', 'user_account', v_user_id, null,
     jsonb_build_object('user_id', v_user_id, 'member_id', p_member_id, 'email', lower(btrim(p_email)), 'role', 'ADMIN'),
@@ -449,7 +461,7 @@ begin
   return v_user_id;
 end
 $$;
-revoke all on function private.bootstrap_admin(text, text) from public, anon, authenticated;
+revoke all on function private.bootstrap_admin(text, text) from public, app_user;
 
 -- ---------------------------------------------------------------------
 -- หลัง import ข้อมูลที่มีรหัสเดิม: เลื่อน sequence ให้เลยรหัสมากสุด
@@ -487,14 +499,14 @@ begin
   end loop;
 end
 $$;
-revoke all on function private.sync_id_sequences() from public, anon, authenticated;
+revoke all on function private.sync_id_sequences() from public, app_user;
 
 -- ---------------------------------------------------------------------
 -- สิทธิ์เรียก RPC
 -- ---------------------------------------------------------------------
-revoke all on function public.get_my_profile(), public.touch_login(), public.get_dashboard(date),
+revoke all on function public.get_my_profile(), public.session_login(), public.get_dashboard(date),
   public.create_invite(text), public.revoke_invite(text), public.register_self(text, text)
-from public, anon;
-grant execute on function public.get_my_profile(), public.touch_login(), public.get_dashboard(date),
+from public;
+grant execute on function public.get_my_profile(), public.session_login(), public.get_dashboard(date),
   public.create_invite(text), public.revoke_invite(text), public.register_self(text, text)
-to authenticated;
+to app_user;
