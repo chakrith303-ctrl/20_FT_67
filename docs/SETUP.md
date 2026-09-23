@@ -28,18 +28,25 @@
 
 ## B — Google Login (Google Cloud Console)
 
-1. https://console.cloud.google.com → ด้านบน **Select a project → New project** → ตั้งชื่อ → Create
-2. เมนู **APIs & Services → OAuth consent screen** (บางบัญชีชื่อ **Google Auth Platform**) → Get started
-   - App name: ชื่อโครงการ · User support email: อีเมลของคุณ
-   - Audience:
-     - ถ้าอีเมลองค์กรเป็น Google Workspace → เลือก **Internal** (คนนอกองค์กร login ไม่ได้เลย)
-     - ถ้าเลือก Internal ไม่ได้ → เลือก **External** แล้วกด **Publish app**
-       (ระบบกันคนนอกโดเมนอีกชั้นด้วยค่า `allowed_email_domains` ในขั้น D)
+1. https://console.cloud.google.com → เลือกโปรเจกต์ (ด้านบน) → **APIs & Services → OAuth consent screen**
+   (หน้าจะชื่อ **Google Auth Platform**) → Get started
+   - App name: `20FT67` · User support email: อีเมลของคุณ
+   - Audience: **Internal** ถ้าใช้บัญชี Google Workspace ขององค์กร · **External** ถ้าใช้ Gmail ส่วนตัว
+   - Contact information: อีเมลของคุณ → Create
+2. ถ้าเป็น External: เมนู **Audience → Test users → Add users** → ใส่อีเมลของคุณเอง
+   (ระหว่างยังไม่ publish จะ login ได้เฉพาะ test user)
 3. เมนู **Clients → Create client**
-   - Application type: **Web application**
-   - Authorized redirect URIs: ใส่ชั่วคราว `https://project-ft67.onrender.com/auth/google/callback`
+   - Application type: **Web application** · Name: `20FT67 web`
+   - Authorized redirect URIs: `https://project-ft67.onrender.com/auth/google/callback`
      (ถ้า Render ให้ชื่อเว็บต่างจากนี้ ค่อยกลับมาแก้หลังขั้น C)
-   - Create → คัดลอก **Client ID** และ **Client Secret**
+   - Create → **คัดลอก Client ID และ Client secret ทันที** (secret อาจแสดงครั้งเดียว)
+4. **ทำหลังขั้น C** (ต้องมีเว็บก่อน) — เปิดให้ทุกคนในองค์กร login ได้ (เฉพาะ External):
+   - เมนู **Branding**:
+     - App home page: `https://<ชื่อเว็บ>.onrender.com`
+     - Application privacy policy link: `https://<ชื่อเว็บ>.onrender.com/privacy.html`
+     - Authorized domains → Add domain: `<ชื่อเว็บ>.onrender.com`
+     - Save
+   - เมนู **Audience → Publish app → Confirm** → สถานะต้องเป็น **In production**
 
 ## C — รันเว็บ (Render)
 
