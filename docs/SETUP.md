@@ -78,36 +78,23 @@
 ## D — ตั้งค่าเริ่มต้นในฐานข้อมูล (Supabase → SQL Editor → New query)
 
 ```sql
--- 1) โดเมนอีเมลที่สมัครได้ (คั่นหลายโดเมนด้วย ,) — ว่าง = ไม่มีใครสมัครได้ · Gmail ส่วนตัวใช้ 'gmail.com'
+-- โดเมนอีเมลที่สมัครได้ (คั่นหลายโดเมนด้วย ,) — ว่าง = ไม่มีใครสมัครได้ · Gmail ส่วนตัวใช้ 'gmail.com'
 update public.app_setting set value = 'gmail.com' where key = 'allowed_email_domains';
-
--- 2) รายชื่อฝ่าย (ต้องตรงกับชื่อใน Google Sheets ทุกตัวอักษร · รันซ้ำได้)
-insert into public.department (name) values ('ฝ่ายบริหาร'), ('ฝ่ายวิชาการ')
-on conflict (name) do nothing;
-
--- 3) สมาชิกอย่างน้อยตัวคุณเอง (ฝ่ายต้องอยู่ในข้อ 2 · ตำแหน่งต้องเป็น ประธานโครงการ / รองประธานโครงการ / หัวหน้า / เลขา / สมาชิก)
-insert into public.member (id, full_name, student_id, department, position, work_status)
-values ('M001', 'ชื่อ นามสกุล', 'รหัสนักศึกษา', 'ฝ่ายบริหาร', 'ประธานโครงการ', 'ปฏิบัติหน้าที่')
-on conflict (id) do update set full_name = excluded.full_name, student_id = excluded.student_id,
-  department = excluded.department, position = excluded.position, work_status = excluded.work_status;
 ```
 
-แก้ชื่อฝ่ายภายหลัง: `update public.department set name = 'ชื่อใหม่' where name = 'ชื่อเดิม';` (ข้อมูลที่อ้างถึงเปลี่ยนตามอัตโนมัติ)
+ฝ่ายและสมาชิกไม่ต้องพิมพ์เอง — นำเข้าจากชีท MEMBER ในขั้น E
 
-ตรวจรายการสถานะที่ระบบยอมรับ (ต้องตรงกับที่ใช้จริงทุกตัวอักษร):
-```sql
-select entity, value from public.status_option order by entity, sort_order;
-```
+## E — ผู้ดูแลระบบ + นำเข้าสมาชิก
 
-## E — ผู้ดูแลระบบคนแรก
-
-1. SQL Editor รัน (ใช้อีเมล Google ของคุณ และรหัสสมาชิกจากขั้น D):
+1. สร้างบัญชี ADMIN (แยกจากทะเบียนสมาชิก ไม่ใช้รหัส M) — SQL Editor:
    ```sql
-   select private.bootstrap_admin('you@example.ac.th', 'M001');
+   select private.bootstrap_admin('you@gmail.com');
    ```
-2. เปิดเว็บ → **เข้าสู่ระบบด้วย Google** ด้วยอีเมลนั้น → ระบบผูกบัญชีให้อัตโนมัติ → เห็นเมนู Dashboard / Invite
-3. สมาชิกคนอื่น: เมนู **Invite** → ใส่รหัสสมาชิก → ส่ง code ให้เจ้าตัวทางช่องทางส่วนตัว
-   → เจ้าตัวเข้าเว็บ login ด้วย Google → กรอกรหัสนักศึกษา + code
+2. เปิดเว็บ → **เข้าสู่ระบบด้วย Google** ด้วยอีเมลนั้น → ระบบผูกบัญชีให้อัตโนมัติ → เห็นแท็บ Dashboard / Invite / นำเข้าสมาชิก
+3. แท็บ **นำเข้าสมาชิก**: ชีท MEMBER คลิก A1 → Ctrl+Shift+End → Ctrl+C → วางในช่อง
+   → ติ๊ก "เพิ่มฝ่ายที่ยังไม่มีในระบบ" → **ตรวจสอบ** → ไม่มีข้อผิดพลาดแล้วกด **นำเข้า**
+4. สมาชิกคนอื่น: แท็บ **Invite** → ใส่รหัสสมาชิก → ส่ง code ให้เจ้าตัวทางช่องทางส่วนตัว
+   → เจ้าตัวเข้าเว็บ login ด้วย Google → กรอกรหัสนักศึกษา (ตามชีท) + code
 
 ## F — ปลุกเว็บอัตโนมัติ (GitHub Actions)
 
